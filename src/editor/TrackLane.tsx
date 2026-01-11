@@ -58,7 +58,6 @@ export const TrackLane = ({
   // Add some padding (20px) to ensure clips don't touch the edge
   const timelineWidth = Math.max(maxEndPosition + 20, 200); // Minimum 200px width
   const trackColor = getTrackColor(track.type);
-console.log({track});
 
   return (
     <div

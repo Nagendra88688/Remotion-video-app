@@ -263,104 +263,6 @@ export const Timeline = ({
     };
   }, [isDragging, pixelsPerSecond, fps, maxFrame, onSeek, dragFrame]);
 
-  const onDragEnd = ({ active, over }: DragEndEvent) => {
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-
-    const sourceTrack = findTrackByClipId(activeId);
-    if (!sourceTrack) return;
-
-    const clip = sourceTrack.clips.find(c => c.id === activeId);
-    if (!clip) return;
-
-    // Check if dragging over a clip (not a track lane)
-    const targetTrackByClip = findTrackByClipId(overId);
-    
-    if (targetTrackByClip) {
-      // Check if dragging over a clip in the same track
-      if (sourceTrack.id === targetTrackByClip.id) {
-        // Same track → REORDER CLIPS
-        const oldIndex = sourceTrack.clips.findIndex(c => c.id === activeId);
-        const newIndex = sourceTrack.clips.findIndex(c => c.id === overId);
-        
-        if (oldIndex === newIndex) return;
-
-        setTracks((prev) => {
-          return prev.map(t => {
-            if (t.id === sourceTrack.id) {
-              const reorderedClips = arrayMove(t.clips, oldIndex, newIndex);
-              const clipsWithStartFrames = recalculateStartFrames(reorderedClips);
-              return { ...t, clips: clipsWithStartFrames };
-            }
-            return t;
-          });
-        });
-      } else {
-        // Different track → Check compatibility before moving
-        const targetTrack = tracks.find((t) => t.id === targetTrackByClip.id);
-        if (!targetTrack) return;
-        
-        // Check if clip type is compatible with target track type
-        if (!isClipCompatibleWithTrack(clip.type, targetTrack.type)) {
-          return; // Don't allow incompatible moves
-        }
-        
-        const targetTrackIndex = tracks.findIndex((t) => t.id === targetTrackByClip.id);
-        if (targetTrackIndex === -1) return;
-
-        setTracks((prev) => {
-          // Move clip to target track instead of creating new track
-          return prev.map(t => {
-            if (t.id === sourceTrack.id) {
-              // Remove clip from source track and recalculate startFrames
-              const remainingClips = t.clips.filter(c => c.id !== activeId);
-              const clipsWithStartFrames = recalculateStartFrames(remainingClips);
-              return { ...t, clips: clipsWithStartFrames };
-            } else if (t.id === targetTrack.id) {
-              // Add clip to target track and recalculate startFrames
-              const newClips = [...t.clips, { ...clip }];
-              const clipsWithStartFrames = recalculateStartFrames(newClips);
-              return { ...t, clips: clipsWithStartFrames };
-            }
-            return t;
-          });
-        });
-      }
-    } else {
-      // Dragging over a track lane → MOVE CLIP INTO THAT TRACK
-      const targetTrack = tracks.find((t) => t.id === overId);
-      if (!targetTrack) return;
-
-      if (sourceTrack.id === targetTrack.id) {
-        // Same track lane - nothing to do
-        return;
-      }
-
-      // Check if clip type is compatible with target track type
-      if (!isClipCompatibleWithTrack(clip.type, targetTrack.type)) {
-        return; // Don't allow incompatible moves
-      }
-
-      setTracks((prev) => {
-        return prev.map(t => {
-          if (t.id === sourceTrack.id) {
-            // Remove clip from source track and recalculate startFrames
-            const remainingClips = t.clips.filter(c => c.id !== activeId);
-            const clipsWithStartFrames = recalculateStartFrames(remainingClips);
-            return { ...t, clips: clipsWithStartFrames };
-          } else if (t.id === targetTrack.id) {
-            // Add clip to target track and recalculate startFrames
-            const newClips = [...t.clips, { ...clip }];
-            const clipsWithStartFrames = recalculateStartFrames(newClips);
-            return { ...t, clips: clipsWithStartFrames };
-          }
-          return t;
-        });
-      });
-    }
-  };
 
   return (
     <div style={{
@@ -534,10 +436,7 @@ export const Timeline = ({
           position: 'relative'
         }}
       >
-        <DndContext
-          collisionDetection={closestCenter}
-          onDragEnd={onDragEnd}
-        >
+        <div>
           {/* Playhead line across all tracks */}
           <div style={{
             position: 'absolute',
@@ -567,7 +466,7 @@ export const Timeline = ({
               />
             </SortableContext>
           ))}
-        </DndContext>
+        </div>
       </div>
 
       {/* Zoom Controls */}

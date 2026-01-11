@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import type { Clip } from "../remotion/types/timeline";
+import { LibraryAsset } from "./LibraryAsset";
 
 interface LibraryProps {
   assets: Clip[];
@@ -68,6 +69,11 @@ export const Library = ({ assets, onAddClip }: LibraryProps) => {
         });
       }
     });
+    
+    // Reset the file input value to allow uploading the same file again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleUrlSubmit = () => {
@@ -310,34 +316,7 @@ export const Library = ({ assets, onAddClip }: LibraryProps) => {
           padding: '8px',
         }}>
           {assets.map((asset) => (
-            <div
-              key={asset.id}
-              style={{
-                padding: '12px',
-                border: '1px solid #e0e0e0',
-                borderRadius: '4px',
-                marginBottom: '8px',
-                backgroundColor: '#fafafa',
-                cursor: 'pointer'
-              }}
-            >
-              <p style={{ 
-                margin: 0, 
-                fontSize: '13px', 
-                fontWeight: 500,
-                color: '#1a1a1a',
-                marginBottom: '4px'
-              }}>
-                {asset.name}
-              </p>
-              <span style={{ 
-                fontSize: '12px', 
-                color: '#666',
-                textTransform: 'capitalize'
-              }}>
-                {asset.type}
-              </span>
-            </div>
+            <LibraryAsset key={asset.id} asset={asset} />
           ))}
         </div>
       )}
