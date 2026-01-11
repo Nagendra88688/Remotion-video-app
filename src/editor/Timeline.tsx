@@ -8,7 +8,7 @@ import {
   horizontalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import type { Track, Clip } from "../remotion/types/timeline";
 import { TrackLane } from "./TrackLane";
 
@@ -20,6 +20,7 @@ interface TimelineProps {
   onClipSelect: (clipId: string | null) => void;
   currentFrame?: number;
   onAddClipFromLibrary?: (clip: Clip) => void;
+  onSeek?: (frame: number) => void;
 }
 
 export const Timeline = ({ 
@@ -29,9 +30,12 @@ export const Timeline = ({
   selectedClipId, 
   onClipSelect,
   currentFrame = 0,
-  onAddClipFromLibrary
+  onAddClipFromLibrary,
+  onSeek
 }: TimelineProps) => {
   const [zoomLevel, setZoomLevel] = useState(100);
+  const [isDragging, setIsDragging] = useState(false);
+  const timelineRulerRef = useRef<HTMLDivElement>(null);
   const pixelsPerSecond = useMemo(() => (60 * zoomLevel) / 100, [zoomLevel]);
 
   const findTrackByClipId = (clipId: string) =>
@@ -132,6 +136,75 @@ export const Timeline = ({
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Calculate max frame from tracks
+  const maxFrame = useMemo(() => {
+    let max = 0;
+    tracks.forEach(track => {
+      track.clips.forEach(clip => {
+        const end = (clip.startFrame || 0) + clip.durationInFrames;
+        max = Math.max(max, end);
+      });
+    });
+    return Math.max(max, 90); // Minimum 90 frames
+  }, [tracks]);
+
+  // Calculate frame from mouse X position
+  const getFrameFromPosition = (clientX: number): number => {
+    if (!timelineRulerRef.current) return 0;
+    const rect = timelineRulerRef.current.getBoundingClientRect();
+    const leftPanelWidth = 200; // Width of the left "Time" panel
+    const x = clientX - rect.left - leftPanelWidth;
+    if (x < 0) return 0;
+    
+    const seconds = x / pixelsPerSecond;
+    const frame = Math.round(seconds * fps);
+    
+    return Math.max(0, Math.min(frame, maxFrame - 1));
+  };
+
+  // Handle mouse down on playhead or timeline
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Only left mouse button
+    // Stop event propagation to prevent conflicts with clip dragging
+    e.stopPropagation();
+    setIsDragging(true);
+    const frame = getFrameFromPosition(e.clientX);
+    onSeek?.(frame);
+  };
+
+  // Handle mouse move while dragging
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!timelineRulerRef.current) return;
+      const rect = timelineRulerRef.current.getBoundingClientRect();
+      const leftPanelWidth = 200;
+      const x = e.clientX - rect.left - leftPanelWidth;
+      if (x < 0) {
+        onSeek?.(0);
+        return;
+      }
+      
+      const seconds = x / pixelsPerSecond;
+      const frame = Math.round(seconds * fps);
+      const clampedFrame = Math.max(0, Math.min(frame, maxFrame - 1));
+      onSeek?.(clampedFrame);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, pixelsPerSecond, fps, maxFrame, onSeek]);
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over) return;
@@ -331,12 +404,17 @@ export const Timeline = ({
         }}>
           Time
         </div>
-        <div style={{
-          position: 'relative',
-          minWidth: `${timelineWidth}px`,
-          height: '100%',
-          overflow: 'visible'
-        }}>
+        <div 
+          ref={timelineRulerRef}
+          style={{
+            position: 'relative',
+            minWidth: `${timelineWidth}px`,
+            height: '100%',
+            overflow: 'visible',
+            cursor: isDragging ? 'grabbing' : 'pointer'
+          }}
+          onMouseDown={handleMouseDown}
+        >
           {/* Time marks */}
           <div style={{
             position: 'absolute',
@@ -346,7 +424,8 @@ export const Timeline = ({
             display: 'flex',
             alignItems: 'center',
             fontSize: '11px',
-            color: '#999'
+            color: '#999',
+            pointerEvents: 'none'
           }}>
             {formatTime(currentFrame)}
           </div>
@@ -358,8 +437,9 @@ export const Timeline = ({
             bottom: 0,
             width: '2px',
             backgroundColor: '#d32f2f',
-            zIndex: 10,
-            pointerEvents: 'none'
+            zIndex: 15,
+            cursor: isDragging ? 'grabbing' : 'grab',
+            pointerEvents: 'auto'
           }}>
             <div style={{
               position: 'absolute',
@@ -371,7 +451,8 @@ export const Timeline = ({
               whiteSpace: 'nowrap',
               backgroundColor: 'rgba(255,255,255,0.9)',
               padding: '2px 4px',
-              borderRadius: '2px'
+              borderRadius: '2px',
+              pointerEvents: 'none'
             }}>
               {formatTime(currentFrame)}
             </div>
@@ -393,14 +474,13 @@ export const Timeline = ({
           {/* Playhead line across all tracks */}
           <div style={{
             position: 'absolute',
-            left: `200px`,
+            left: `${200 + playheadPosition}px`,
             top: 0,
             bottom: 0,
             width: '2px',
             backgroundColor: '#d32f2f',
             zIndex: 5,
-            pointerEvents: 'none',
-            transform: `translateX(${playheadPosition}px)`
+            pointerEvents: 'none'
           }} />
           
           {tracks.map((track) => (

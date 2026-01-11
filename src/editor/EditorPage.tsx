@@ -280,6 +280,7 @@ export const EditorPage = () => {
           onClipSelect={setSelectedClipId}
           currentFrame={currentFrame}
           onAddClipFromLibrary={handleAddClipToTimeline}
+          onSeek={handleSeek}
         />
       </div>
     </div>
