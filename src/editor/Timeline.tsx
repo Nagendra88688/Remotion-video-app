@@ -42,6 +42,7 @@ export const Timeline = ({
   const [dragFrame, setDragFrame] = useState<number | null>(null);
   const [isHoveringPlayhead, setIsHoveringPlayhead] = useState(false);
   const timelineRulerRef = useRef<HTMLDivElement>(null);
+  const tracksContainerRef = useRef<HTMLDivElement>(null);
   const pixelsPerSecond = useMemo(() => (60 * zoomLevel) / 100, [zoomLevel]);
 
   const findTrackByClipId = (clipId: string) =>
@@ -94,6 +95,28 @@ export const Timeline = ({
     };
     setTracks((prev) => [...prev, newTrack]);
   };
+
+  // Auto-scroll to bottom when tracks are added
+  useEffect(() => {
+    if (tracksContainerRef.current && tracks.length > 0) {
+      // Use setTimeout with requestAnimationFrame to ensure DOM has fully updated and rendered
+      // This is especially important for the first track addition
+      const scrollToBottom = () => {
+        if (tracksContainerRef.current) {
+          tracksContainerRef.current.scrollTop = tracksContainerRef.current.scrollHeight;
+        }
+      };
+      
+      // Use multiple frames to ensure layout is complete
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToBottom();
+          // Additional delay for first track to ensure full render
+          setTimeout(scrollToBottom, 50);
+        });
+      });
+    }
+  }, [tracks.length]);
 
   const handleAddClipToTrack = (trackId: string, type?: string) => {
     // If it's a text track, open the text modal
@@ -349,7 +372,7 @@ export const Timeline = ({
       position: 'relative'
     }}>
       {/* Add Track Buttons */}
-      {/* <div style={{
+      <div style={{
         display: 'flex',
         gap: '8px',
         padding: '12px 16px',
@@ -357,7 +380,7 @@ export const Timeline = ({
         backgroundColor: '#fafafa'
       }}>
         <button
-          onClick={() => handleAddTrack("image")}
+          onClick={() => handleAddTrack("video")}
           style={{
             padding: '8px 12px',
             backgroundColor: '#ffffff',
@@ -372,7 +395,7 @@ export const Timeline = ({
           }}
           title="Add Image/Video Track"
         >
-          <span>⬜</span>
+          <span>🎥</span>
           <span>+</span>
         </button>
         <button
@@ -410,10 +433,10 @@ export const Timeline = ({
           }}
           title="Add Text Track"
         >
-          <span>A</span>
+          <span>Aa</span>
           <span>+</span>
         </button>
-      </div> */}
+      </div>
 
       {/* Time Ruler */}
       <div style={{
@@ -503,12 +526,14 @@ export const Timeline = ({
       </div>
 
       {/* Tracks Area */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        overflowX: 'auto',
-        position: 'relative'
-      }}>
+      <div 
+        ref={tracksContainerRef}
+        style={{
+          height: '200px',
+          overflow: 'auto',
+          position: 'relative'
+        }}
+      >
         <DndContext
           collisionDetection={closestCenter}
           onDragEnd={onDragEnd}
