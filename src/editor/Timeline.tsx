@@ -21,20 +21,26 @@ interface TimelineProps {
   currentFrame?: number;
   onAddClipFromLibrary?: (clip: Clip) => void;
   onSeek?: (frame: number) => void;
+  onOpenTextModal?: (trackId: string) => void;
+  onOpenFileUpload?: (trackId: string, trackType: string) => void;
 }
 
 export const Timeline = ({ 
   tracks, 
   setTracks, 
   fps, 
-  selectedClipId, 
+  selectedClipId,
   onClipSelect,
   currentFrame = 0,
   onAddClipFromLibrary,
-  onSeek
+  onSeek,
+  onOpenTextModal,
+  onOpenFileUpload
 }: TimelineProps) => {
   const [zoomLevel, setZoomLevel] = useState(100);
   const [isDragging, setIsDragging] = useState(false);
+  const [dragFrame, setDragFrame] = useState<number | null>(null);
+  const [isHoveringPlayhead, setIsHoveringPlayhead] = useState(false);
   const timelineRulerRef = useRef<HTMLDivElement>(null);
   const pixelsPerSecond = useMemo(() => (60 * zoomLevel) / 100, [zoomLevel]);
 
@@ -90,25 +96,17 @@ export const Timeline = ({
   };
 
   const handleAddClipToTrack = (trackId: string, type?: string) => {
-    // This would typically open a dialog or use a clip from library
-    // For now, we'll create a placeholder clip
-    const newClip: Clip = {
-      id: crypto.randomUUID(),
-      type: (type as any) || "image",
-      durationInFrames: 90,
-      startFrame: 0,
-      name: `New ${type || "clip"}`,
-      ...(type === "text" ? { text: "New Text" } : { src: "" }),
-    };
+    // If it's a text track, open the text modal
+    if (type === "text") {
+      onOpenTextModal?.(trackId);
+      return;
+    }
     
-    // Find track and add clip, recalculating start frames
-    setTracks((prev) => prev.map(t => {
-      if (t.id === trackId) {
-        const updatedClips = [...t.clips, { ...newClip, startFrame: 0 }];
-        return { ...t, clips: recalculateStartFrames(updatedClips) };
-      }
-      return t;
-    }));
+    // For video or audio tracks, open file upload
+    if (type === "video" || type === "audio") {
+      onOpenFileUpload?.(trackId, type);
+      return;
+    }
   };
 
   const handleDeleteTrack = (trackId: string) => {
@@ -128,7 +126,9 @@ export const Timeline = ({
   };
 
   const timelineWidth = getMaxTimelineWidth();
-  const playheadPosition = (currentFrame / fps) * pixelsPerSecond;
+  // Use dragFrame for immediate visual feedback during dragging, otherwise use currentFrame
+  const displayFrame = isDragging && dragFrame !== null ? dragFrame : currentFrame;
+  const playheadPosition = (displayFrame / fps) * pixelsPerSecond;
 
   const formatTime = (frames: number) => {
     const seconds = frames / fps;
@@ -177,34 +177,68 @@ export const Timeline = ({
   useEffect(() => {
     if (!isDragging) return;
 
+    let rafId: number | null = null;
+    let lastSeekTime = 0;
+    const seekThrottle = 50; // Throttle actual player seeks to every 50ms
+
     const handleMouseMove = (e: MouseEvent) => {
       if (!timelineRulerRef.current) return;
       const rect = timelineRulerRef.current.getBoundingClientRect();
       const leftPanelWidth = 200;
       const x = e.clientX - rect.left - leftPanelWidth;
+      
+      let frame: number;
       if (x < 0) {
-        onSeek?.(0);
-        return;
+        frame = 0;
+      } else {
+        const seconds = x / pixelsPerSecond;
+        frame = Math.round(seconds * fps);
+        frame = Math.max(0, Math.min(frame, maxFrame - 1));
       }
       
-      const seconds = x / pixelsPerSecond;
-      const frame = Math.round(seconds * fps);
-      const clampedFrame = Math.max(0, Math.min(frame, maxFrame - 1));
-      onSeek?.(clampedFrame);
+      // Update local state immediately for visual feedback
+      setDragFrame(frame);
+      
+      // Throttle actual player seeks to avoid performance issues
+      const now = performance.now();
+      if (now - lastSeekTime >= seekThrottle) {
+        onSeek?.(frame);
+        lastSeekTime = now;
+      } else {
+        // Schedule a seek for the next frame if not already scheduled
+        if (rafId === null) {
+          rafId = requestAnimationFrame(() => {
+            onSeek?.(frame);
+            rafId = null;
+          });
+        }
+      }
     };
 
     const handleMouseUp = () => {
+      // Final seek to ensure player is at exact position
+      if (dragFrame !== null) {
+        onSeek?.(dragFrame);
+      }
       setIsDragging(false);
+      setDragFrame(null);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mousemove', handleMouseMove, { passive: true });
     document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
     };
-  }, [isDragging, pixelsPerSecond, fps, maxFrame, onSeek]);
+  }, [isDragging, pixelsPerSecond, fps, maxFrame, onSeek, dragFrame]);
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over) return;
@@ -392,7 +426,7 @@ export const Timeline = ({
         overflowY: 'hidden'
       }}>
         <div style={{
-          minWidth: '200px',
+          minWidth: '175px',
           padding: '0 12px',
           display: 'flex',
           alignItems: 'center',
@@ -427,20 +461,28 @@ export const Timeline = ({
             color: '#999',
             pointerEvents: 'none'
           }}>
-            {formatTime(currentFrame)}
+            {formatTime(displayFrame)}
           </div>
           {/* Playhead */}
-          <div style={{
-            position: 'absolute',
-            left: `${playheadPosition}px`,
-            top: 0,
-            bottom: 0,
-            width: '2px',
-            backgroundColor: '#d32f2f',
-            zIndex: 15,
-            cursor: isDragging ? 'grabbing' : 'grab',
-            pointerEvents: 'auto'
-          }}>
+          <div 
+            style={{
+              position: 'absolute',
+              left: `${playheadPosition}px`,
+              top: 0,
+              bottom: 0,
+              width: '2px',
+              backgroundColor: '#d32f2f',
+              zIndex: 15,
+              cursor: isDragging ? 'grabbing' : 'grab',
+              pointerEvents: 'auto',
+              transform: isHoveringPlayhead ? 'scaleX(3)' : 'scaleX(1)',
+              transformOrigin: 'center center',
+              transition: 'transform 0.15s ease-out',
+              borderRadius: '1px'
+            }}
+            onMouseEnter={() => setIsHoveringPlayhead(true)}
+            onMouseLeave={() => setIsHoveringPlayhead(false)}
+          >
             <div style={{
               position: 'absolute',
               top: '-18px',
@@ -454,7 +496,7 @@ export const Timeline = ({
               borderRadius: '2px',
               pointerEvents: 'none'
             }}>
-              {formatTime(currentFrame)}
+              {formatTime(displayFrame)}
             </div>
           </div>
         </div>

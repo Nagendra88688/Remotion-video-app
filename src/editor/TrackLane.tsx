@@ -79,11 +79,11 @@ export const TrackLane = ({
         alignItems: 'center',
         gap: '8px',
         padding: '8px 12px',
-        minWidth: '200px',
+        minWidth: '175px',
         borderRight: `1px solid ${trackColor.border}`,
         backgroundColor: '#ffffff'
       }}>
-        <button
+        {/* <button
           style={{
             background: 'none',
             border: 'none',
@@ -95,7 +95,7 @@ export const TrackLane = ({
           title="Track options"
         >
           ⋮
-        </button>
+        </button> */}
         
         <span style={{
           flex: 1,
@@ -125,7 +125,7 @@ export const TrackLane = ({
           +
         </button>
 
-        <button
+        {/* <button
           onClick={() => onDeleteTrack?.(track.id)}
           style={{
             background: 'none',
@@ -141,7 +141,7 @@ export const TrackLane = ({
           title="Delete track"
         >
           🗑
-        </button>
+        </button> */}
       </div>
 
       {/* Timeline area */}

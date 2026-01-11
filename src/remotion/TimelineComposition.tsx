@@ -49,6 +49,7 @@ export const TimelineComposition = ({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  overflow: "hidden",
                 }}
               >
                 {clip.type === "video" && clip.src && (
@@ -56,6 +57,11 @@ export const TimelineComposition = ({
                     src={clip.src}
                     startFrom={0}
                     volume={1}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                    }}
                   />
                 )}
 
