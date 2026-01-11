@@ -16,15 +16,15 @@ interface Props {
 const getTrackColor = (type?: string) => {
   switch (type) {
     case 'text':
-      return { bg: '#f3e8ff', border: '#d8b4fe' }; // Light purple
+      return { bg: '#f5f5f5', border: '#d0d0d0' }; // Light gray
     case 'video':
-      return { bg: '#dbeafe', border: '#93c5fd' }; // Light blue
+      return { bg: '#e8e8e8', border: '#d0d0d0' }; // Medium gray
     case 'audio':
-      return { bg: '#dcfce7', border: '#86efac' }; // Light green
+      return { bg: '#f0f0f0', border: '#d0d0d0' }; // Slightly lighter gray
     case 'image':
-      return { bg: '#fef3c7', border: '#fde047' }; // Light yellow
+      return { bg: '#eaeaea', border: '#d0d0d0' }; // Medium-light gray
     default:
-      return { bg: '#f5f5f5', border: '#e0e0e0' }; // Light gray
+      return { bg: '#f5f5f5', border: '#d0d0d0' }; // Default gray
   }
 };
 
