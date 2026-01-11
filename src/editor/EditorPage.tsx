@@ -158,28 +158,47 @@ export const EditorPage = () => {
     }
   }, [isPlaying]);
 
-  // Update currentFrame for playhead visualization (throttled to avoid stuttering)
+  // Update currentFrame for playhead visualization (smooth updates)
   useEffect(() => {
     if (!isPlaying) return;
     
-    // Use a longer interval (150ms) to update playhead position without causing stuttering
-    // This updates the visual playhead without interfering with smooth video playback
-    const interval = setInterval(() => {
-      setCurrentFrame(prev => {
-        const increment = 5; // ~5 frames per 150ms at 30fps
-        const next = Math.min(prev + increment, totalFrames - 1);
+    const fps = 30;
+    const frameDuration = 1000 / fps; // ~33.33ms per frame at 30fps
+    
+    // Use requestAnimationFrame for smooth, frame-synced updates
+    let animationFrameId: number;
+    let lastUpdateTime = performance.now();
+    
+    const updatePlayhead = (currentTime: number) => {
+      const elapsed = currentTime - lastUpdateTime;
+      
+      if (elapsed >= frameDuration) {
+        setCurrentFrame(prev => {
+          const framesToAdvance = Math.floor(elapsed / frameDuration);
+          const next = Math.min(prev + framesToAdvance, totalFrames - 1);
+          
+          if (next >= totalFrames - 1) {
+            // Automatically reset to beginning when reaching the end
+            handleReset();
+            return 0;
+          }
+          
+          return next;
+        });
         
-        if (next >= totalFrames - 1) {
-          // Automatically reset to beginning when reaching the end
-          handleReset();
-          return 0;
-        }
-        
-        return next;
-      });
-    }, 150); // Update every 150ms - frequent enough for smooth playhead, infrequent enough to avoid stuttering
+        lastUpdateTime = currentTime - (elapsed % frameDuration);
+      }
+      
+      animationFrameId = requestAnimationFrame(updatePlayhead);
+    };
+    
+    animationFrameId = requestAnimationFrame(updatePlayhead);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
   }, [isPlaying, totalFrames, handleReset]);
 
   return (
