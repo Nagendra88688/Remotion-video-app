@@ -83,7 +83,7 @@ export const TrackLane = ({
         borderRight: `1px solid ${trackColor.border}`,
         backgroundColor: '#ffffff'
       }}>
-        <button
+        {/* <button
           style={{
             background: 'none',
             border: 'none',
@@ -95,7 +95,7 @@ export const TrackLane = ({
           title="Track options"
         >
           ⋮
-        </button>
+        </button> */}
         
         <span style={{
           flex: 1,

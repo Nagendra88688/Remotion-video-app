@@ -6,12 +6,19 @@ import { TimelineComposition } from "../remotion/TimelineComposition";
 import { Library } from "./Library";
 import { PlaybackControls } from "./PlaybackControls";
 import { PropertiesPanel } from "./PropertiesPanel";
+import { TextInputModal } from "./TextInputModal";
 import type { Clip, Track } from "../remotion/types/timeline";
 
 export const EditorPage = () => {
   const playerRef = useRef<PlayerRef>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const rendererRef = useRef<HTMLDivElement>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showTextModal, setShowTextModal] = useState(false);
+  const [pendingTextClip, setPendingTextClip] = useState<{ trackId?: string } | null>(null);
+  const [pendingFileUpload, setPendingFileUpload] = useState<{ trackId: string; trackType: string } | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Library assets (separate from timeline clips)
   const [assets, setAssets] = useState<Clip[]>([]);
@@ -33,13 +40,13 @@ export const EditorPage = () => {
     {
       id: "audio-track-1",
       clips: [],
-      name: "Audio",
+      name: "Audio 🎵",
       type: "audio",
     },
   ]);
 
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-
+  
   // Calculate total duration based on all clips in all tracks
   const totalFrames = useMemo(() => {
     let maxEnd = 0;
@@ -75,8 +82,8 @@ export const EditorPage = () => {
     });
   }, []);
 
-  // Add clip from library to timeline
-  const handleAddClipToTimeline = useCallback((clip: Clip, trackId?: string) => {
+  // Internal function to actually add clip to timeline
+  const addClipToTimeline = useCallback((clip: Clip, trackId?: string) => {
     // Create a new clip instance for the timeline (don't reuse the library clip)
     // Spread all properties first, then override with new ID and ensure startFrame
     const clipToAdd: Clip = { 
@@ -126,12 +133,147 @@ export const EditorPage = () => {
     });
   }, [recalculateStartFrames]);
 
+  // Add clip from library to timeline
+  const handleAddClipToTimeline = useCallback((clip: Clip, trackId?: string) => {
+    // If it's a text clip, show modal first
+    if (clip.type === "text") {
+      setPendingTextClip({ trackId });
+      setShowTextModal(true);
+      return;
+    }
+
+    // For non-text clips, add directly
+    addClipToTimeline(clip, trackId);
+  }, [addClipToTimeline]);
+
+  // Handle text modal confirm
+  const handleTextConfirm = useCallback((text: string) => {
+    const textClip: Clip = {
+      id: crypto.randomUUID(),
+      type: "text",
+      text: text,
+      name: `Text: ${text.slice(0, 20)}${text.length > 20 ? "..." : ""}`,
+      startFrame: 0,
+      durationInFrames: 90,
+    };
+    
+    addClipToTimeline(textClip, pendingTextClip?.trackId);
+    setShowTextModal(false);
+    setPendingTextClip(null);
+  }, [addClipToTimeline, pendingTextClip]);
+
+  // Handle text modal cancel
+  const handleTextCancel = useCallback(() => {
+    setShowTextModal(false);
+    setPendingTextClip(null);
+  }, []);
+
+  // Handle exit fullscreen
+  const handleExitFullscreen = useCallback(async () => {
+    try {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if ((document as any).webkitExitFullscreen) {
+        await (document as any).webkitExitFullscreen();
+      } else if ((document as any).mozCancelFullScreen) {
+        await (document as any).mozCancelFullScreen();
+      } else if ((document as any).msExitFullscreen) {
+        await (document as any).msExitFullscreen();
+      }
+    } catch (err) {
+      console.error("Error attempting to exit fullscreen:", err);
+    }
+  }, []);
+
   // Add clip to library (assets) and automatically add to timeline
   const handleAddClipToLibrary = useCallback((clip: Clip) => {
     setAssets(prev => [...prev, clip]);
     // Automatically add to timeline in the appropriate track
     handleAddClipToTimeline(clip);
   }, [handleAddClipToTimeline]);
+
+  // Handle file upload for track + button
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !pendingFileUpload) return;
+    
+    const { trackId, trackType } = pendingFileUpload;
+    
+    Array.from(e.target.files).forEach((file) => {
+      const url = URL.createObjectURL(file);
+      const baseClip = {
+        id: crypto.randomUUID(),
+        startFrame: 0,
+        durationInFrames: 90,
+        name: file.name,
+      };
+
+      if (file.type.startsWith("image")) {
+        // Only allow images for video tracks
+        if (trackType === "video") {
+          const imageClip: Clip = {
+            ...baseClip,
+            type: "image",
+            src: url,
+          };
+          addClipToTimeline(imageClip, trackId);
+        }
+      } else if (file.type.startsWith("video")) {
+        // Only allow videos for video tracks
+        if (trackType === "video") {
+          // Create video element to detect actual duration
+          const video = document.createElement("video");
+          video.src = url;
+          video.preload = "metadata";
+          
+          video.onloadedmetadata = () => {
+            const durationInSeconds = video.duration || 0;
+            const durationInFrames = Math.ceil(durationInSeconds * 30); // 30fps
+            
+            const videoClip: Clip = {
+              ...baseClip,
+              type: "video",
+              src: url,
+              durationInFrames: durationInFrames || 300,
+            };
+            addClipToTimeline(videoClip, trackId);
+          };
+          
+          video.onerror = () => {
+            const videoClip: Clip = {
+              ...baseClip,
+              type: "video",
+              src: url,
+              durationInFrames: 300,
+            };
+            addClipToTimeline(videoClip, trackId);
+          };
+          
+          video.load();
+        }
+      } else if (file.type.startsWith("audio")) {
+        // Only allow audio for audio tracks
+        if (trackType === "audio") {
+          const audioClip: Clip = {
+            ...baseClip,
+            type: "audio",
+            src: url,
+            durationInFrames: 300,
+          };
+          addClipToTimeline(audioClip, trackId);
+        }
+      }
+    });
+    
+    // Reset file input and pending upload
+    e.target.value = "";
+    setPendingFileUpload(null);
+  }, [pendingFileUpload, addClipToTimeline]);
+
+  // Open file upload dialog for track
+  const handleOpenFileUpload = useCallback((trackId: string, trackType: string) => {
+    setPendingFileUpload({ trackId, trackType });
+    fileInputRef.current?.click();
+  }, []);
 
   const handlePlay = () => {
     playerRef.current?.play();
@@ -201,7 +343,27 @@ export const EditorPage = () => {
     };
   }, [isPlaying, totalFrames, handleReset]);
 
+  // Handle fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
+
   return (
+    <>
     <div style={{
       display: 'flex',
       flexDirection: 'column',
@@ -225,14 +387,17 @@ export const EditorPage = () => {
         </div>
 
         {/* Center Panel: Video Preview */}
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          backgroundColor: '#000000',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
+        <div 
+          ref={rendererRef}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: '#000000',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
           <div style={{
             position: 'absolute',
             top: '8px',
@@ -246,24 +411,59 @@ export const EditorPage = () => {
           }}>
             1.00
           </div>
+          {/* Exit Fullscreen button - only visible in fullscreen mode */}
+          {isFullscreen && (
+            <button
+              onClick={handleExitFullscreen}
+              style={{
+                position: 'absolute',
+                top: '8px',
+                right: '8px',
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                border: '1px solid rgba(255,255,255,0.3)',
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '20px',
+                color: '#ffffff',
+                zIndex: 20,
+                transition: 'all 0.2s'
+              }}
+              title="Exit Fullscreen"
+            >
+              ✕
+            </button>
+          )}
           <div style={{
             flex: 1,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            aspectRatio: '16 / 9',
+            maxHeight: '100%',
+            maxWidth: '100%'
           }}>
-            <Player
+      <Player
               ref={playerRef}
-              component={TimelineComposition}
-              inputProps={{ tracks, selectedClipId }}
-              durationInFrames={totalFrames}
-              fps={30}
-              compositionWidth={1280}
-              compositionHeight={720}
+        component={TimelineComposition}
+        inputProps={{ tracks, selectedClipId }}
+        durationInFrames={totalFrames}
+        fps={30}
+        compositionWidth={1280}
+        compositionHeight={720}
               controls={false}
               style={{
                 width: '100%',
-                height: '100%'
+                height: '100%',
+                maxWidth: '100%',
+                maxHeight: '100%'
               }}
             />
           </div>
@@ -281,6 +481,7 @@ export const EditorPage = () => {
         onPause={handlePause}
         onReset={handleReset}
         isPlaying={isPlaying}
+        rendererRef={rendererRef}
       />
 
       {/* Bottom Section: Timeline */}
@@ -291,17 +492,37 @@ export const EditorPage = () => {
         minHeight: 0,
         overflow: 'hidden'
       }}>
-        <Timeline 
-          tracks={tracks}
-          setTracks={setTracks}
-          fps={30}
-          selectedClipId={selectedClipId}
-          onClipSelect={setSelectedClipId}
+      <Timeline 
+        tracks={tracks}
+        setTracks={setTracks}
+        fps={30}
+        selectedClipId={selectedClipId}
+        onClipSelect={setSelectedClipId}
           currentFrame={currentFrame}
           onAddClipFromLibrary={handleAddClipToTimeline}
           onSeek={handleSeek}
+          onOpenTextModal={(trackId) => {
+            setPendingTextClip({ trackId });
+            setShowTextModal(true);
+          }}
+          onOpenFileUpload={handleOpenFileUpload}
         />
       </div>
     </div>
+
+    <TextInputModal
+      isOpen={showTextModal}
+      onConfirm={handleTextConfirm}
+      onCancel={handleTextCancel}
+    />
+    <input
+      ref={fileInputRef}
+      type="file"
+      multiple
+      accept="image/*,video/*,audio/*"
+      onChange={handleFileUpload}
+      style={{ display: 'none' }}
+    />
+    </>
   );
 };

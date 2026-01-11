@@ -21,6 +21,8 @@ interface TimelineProps {
   currentFrame?: number;
   onAddClipFromLibrary?: (clip: Clip) => void;
   onSeek?: (frame: number) => void;
+  onOpenTextModal?: (trackId: string) => void;
+  onOpenFileUpload?: (trackId: string, trackType: string) => void;
 }
 
 export const Timeline = ({ 
@@ -31,7 +33,9 @@ export const Timeline = ({
   onClipSelect,
   currentFrame = 0,
   onAddClipFromLibrary,
-  onSeek
+  onSeek,
+  onOpenTextModal,
+  onOpenFileUpload
 }: TimelineProps) => {
   const [zoomLevel, setZoomLevel] = useState(100);
   const [isDragging, setIsDragging] = useState(false);
@@ -92,25 +96,17 @@ export const Timeline = ({
   };
 
   const handleAddClipToTrack = (trackId: string, type?: string) => {
-    // This would typically open a dialog or use a clip from library
-    // For now, we'll create a placeholder clip
-    const newClip: Clip = {
-      id: crypto.randomUUID(),
-      type: (type as any) || "image",
-      durationInFrames: 90,
-      startFrame: 0,
-      name: `New ${type || "clip"}`,
-      ...(type === "text" ? { text: "New Text" } : { src: "" }),
-    };
+    // If it's a text track, open the text modal
+    if (type === "text") {
+      onOpenTextModal?.(trackId);
+      return;
+    }
     
-    // Find track and add clip, recalculating start frames
-    setTracks((prev) => prev.map(t => {
-      if (t.id === trackId) {
-        const updatedClips = [...t.clips, { ...newClip, startFrame: 0 }];
-        return { ...t, clips: recalculateStartFrames(updatedClips) };
-      }
-      return t;
-    }));
+    // For video or audio tracks, open file upload
+    if (type === "video" || type === "audio") {
+      onOpenFileUpload?.(trackId, type);
+      return;
+    }
   };
 
   const handleDeleteTrack = (trackId: string) => {
