@@ -392,7 +392,7 @@ export const Timeline = ({
         overflowY: 'hidden'
       }}>
         <div style={{
-          minWidth: '200px',
+          minWidth: '175px',
           padding: '0 12px',
           display: 'flex',
           alignItems: 'center',

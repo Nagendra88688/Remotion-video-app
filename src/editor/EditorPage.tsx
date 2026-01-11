@@ -21,19 +21,19 @@ export const EditorPage = () => {
     {
       id: "text-track-1",
       clips: [],
-      name: "Text 1",
+      name: "Text",
       type: "text",
     },
     {
       id: "video-track-1",
       clips: [],
-      name: "Video 1",
+      name: "Video",
       type: "video",
     },
     {
       id: "audio-track-1",
       clips: [],
-      name: "Audio 1",
+      name: "Audio",
       type: "audio",
     },
   ]);
