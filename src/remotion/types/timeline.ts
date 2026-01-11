@@ -13,4 +13,6 @@ export type Clip = {
 export type Track = {
   id: string;
   clips: Clip[];
+  name?: string;
+  type?: ClipType;
 };

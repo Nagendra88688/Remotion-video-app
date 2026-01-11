@@ -7,9 +7,10 @@ interface SortableClipProps {
   fps: number;
   isSelected: boolean;
   onSelect: () => void;
+  pixelsPerSecond?: number;
 }
 
-export const SortableClip = ({ clip, fps, isSelected, onSelect }: SortableClipProps) => {
+export const SortableClip = ({ clip, fps, isSelected, onSelect, pixelsPerSecond = 60 }: SortableClipProps) => {
   const {
     setNodeRef,
     attributes,
@@ -19,7 +20,6 @@ export const SortableClip = ({ clip, fps, isSelected, onSelect }: SortableClipPr
   } = useSortable({ id: clip.id });
 
   // Calculate width and position based on duration and startFrame
-  const pixelsPerSecond = 60; // 60 pixels = 1 second
   const durationInSeconds = clip.durationInFrames / fps;
   const startSeconds = (clip.startFrame || 0) / fps;
   const width = Math.max(durationInSeconds * pixelsPerSecond, 60); // Minimum 60px
@@ -28,22 +28,26 @@ export const SortableClip = ({ clip, fps, isSelected, onSelect }: SortableClipPr
   const style: React.CSSProperties = {
     position: "absolute",
     left: `${left}px`,
-    top: 0,
+    top: 8,
     transform: CSS.Transform.toString(transform),
     transition,
-    padding: 12,
-    background: isSelected ? "#555" : "#333",
-    border: isSelected ? "2px solid #4a9eff" : "2px solid transparent",
-    color: "white",
+    padding: 8,
+    background: isSelected ? "#e8f2ff" : "#ffffff",
+    border: isSelected ? "2px solid #4a9eff" : "1px solid #d0d0d0",
+    color: isSelected ? "#1a1a1a" : "#666",
     width: `${width}px`,
     minWidth: 60,
     textAlign: "center",
     cursor: "grab",
-    height: "44px",
+    height: "40px",
     boxSizing: "border-box",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: "4px",
+    fontSize: "12px",
+    fontWeight: isSelected ? 500 : 400,
+    boxShadow: isSelected ? "0 2px 4px rgba(74, 158, 255, 0.2)" : "0 1px 2px rgba(0,0,0,0.1)",
   };
 
   const handleClick = (e: React.MouseEvent) => {

@@ -8,56 +8,172 @@ interface Props {
   fps: number;
   selectedClipId: string | null;
   onClipSelect: (clipId: string | null) => void;
+  onAddClip?: (trackId: string, type?: string) => void;
+  onDeleteTrack?: (trackId: string) => void;
+  pixelsPerSecond?: number;
 }
 
-export const TrackLane = ({ track, fps, selectedClipId, onClipSelect }: Props) => {
+const getTrackColor = (type?: string) => {
+  switch (type) {
+    case 'text':
+      return { bg: '#f3e8ff', border: '#d8b4fe' }; // Light purple
+    case 'video':
+      return { bg: '#dbeafe', border: '#93c5fd' }; // Light blue
+    case 'audio':
+      return { bg: '#dcfce7', border: '#86efac' }; // Light green
+    case 'image':
+      return { bg: '#fef3c7', border: '#fde047' }; // Light yellow
+    default:
+      return { bg: '#f5f5f5', border: '#e0e0e0' }; // Light gray
+  }
+};
+
+export const TrackLane = ({ 
+  track, 
+  fps, 
+  selectedClipId, 
+  onClipSelect,
+  onAddClip,
+  onDeleteTrack,
+  pixelsPerSecond = 60
+}: Props) => {
   const { setNodeRef, isOver } = useDroppable({
     id: track.id,
   });
 
-  // Calculate total timeline width based on the last clip's end time
-  const pixelsPerSecond = 60;
-  const getClipEndTime = (clip: typeof track.clips[0]) => {
+  // Calculate total timeline width based on the last clip's end position
+  // Need to ensure we include the full width of all clips
+  const calculateClipEndPosition = (clip: typeof track.clips[0]) => {
     const startSeconds = (clip.startFrame || 0) / fps;
     const durationSeconds = clip.durationInFrames / fps;
-    return startSeconds + durationSeconds;
+    const startPosition = startSeconds * pixelsPerSecond;
+    const clipWidth = Math.max(durationSeconds * pixelsPerSecond, 60); // Minimum 60px
+    return startPosition + clipWidth;
   };
 
-  const maxEndTime = track.clips.length > 0
-    ? Math.max(...track.clips.map(getClipEndTime))
+  const maxEndPosition = track.clips.length > 0
+    ? Math.max(...track.clips.map(calculateClipEndPosition))
     : 0;
   
-  const timelineWidth = Math.max(maxEndTime * pixelsPerSecond, 200); // Minimum 200px width
+  // Add some padding (20px) to ensure clips don't touch the edge
+  const timelineWidth = Math.max(maxEndPosition + 20, 200); // Minimum 200px width
+  const trackColor = getTrackColor(track.type);
 
   return (
     <div
       style={{
-        padding: 8,
-        background: isOver ? "#333" : "#1e1e1e",
-        marginBottom: 6,
+        display: 'flex',
+        alignItems: 'center',
+        marginBottom: 4,
         position: "relative",
-        minHeight: 60,
-        overflow: "visible",
+        minHeight: 56,
+        backgroundColor: trackColor.bg,
+        border: `1px solid ${trackColor.border}`,
+        borderRadius: '4px',
+        overflow: 'visible',
       }}
     >
-      <div 
-        ref={setNodeRef}
-        style={{ 
-          position: "relative", 
-          width: `${timelineWidth}px`, 
-          minHeight: 44,
-          height: "100%" 
-        }}
-      >
-        {track.clips.map((clip) => (
-          <SortableClip 
-            key={clip.id} 
-            clip={clip} 
-            fps={fps}
-            isSelected={selectedClipId === clip.id}
-            onSelect={() => onClipSelect(clip.id)}
-          />
-        ))}
+      {/* Track controls (left side) */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '8px 12px',
+        minWidth: '200px',
+        borderRight: `1px solid ${trackColor.border}`,
+        backgroundColor: '#ffffff'
+      }}>
+        <button
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '4px',
+            fontSize: '16px',
+            color: '#666'
+          }}
+          title="Track options"
+        >
+          ⋮
+        </button>
+        
+        <span style={{
+          flex: 1,
+          fontSize: '14px',
+          fontWeight: 500,
+          color: '#1a1a1a',
+          textAlign: 'left'
+        }}>
+          {track.name || `Track ${track.id.slice(0, 8)}`}
+        </span>
+
+        <button
+          onClick={() => onAddClip?.(track.id, track.type)}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '4px',
+            fontSize: '16px',
+            color: '#666',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          title="Add clip to track"
+        >
+          +
+        </button>
+
+        <button
+          onClick={() => onDeleteTrack?.(track.id)}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '4px',
+            fontSize: '16px',
+            color: '#d32f2f',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          title="Delete track"
+        >
+          🗑
+        </button>
+      </div>
+
+      {/* Timeline area */}
+      <div style={{ 
+        flex: 1, 
+        position: 'relative', 
+        minHeight: 56,
+        overflowX: 'auto',
+        overflowY: 'hidden'
+      }}>
+        <div 
+          ref={setNodeRef}
+          style={{ 
+            position: "relative", 
+            width: `${timelineWidth}px`, 
+            minWidth: '100%',
+            minHeight: 56,
+            height: "100%",
+            backgroundColor: isOver ? 'rgba(74, 158, 255, 0.1)' : 'transparent'
+          }}
+        >
+          {track.clips.map((clip) => (
+            <SortableClip 
+              key={clip.id} 
+              clip={clip} 
+              fps={fps}
+              isSelected={selectedClipId === clip.id}
+              onSelect={() => onClipSelect(clip.id)}
+              pixelsPerSecond={pixelsPerSecond}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

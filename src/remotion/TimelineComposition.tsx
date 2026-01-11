@@ -16,51 +16,82 @@ export const TimelineComposition = ({
 }) => {
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
-      {tracks.map((track, trackIndex) =>
-        track.clips.map((clip) => (
-          <Sequence
-            key={clip.id}
-            from={clip.startFrame}
-            durationInFrames={clip.durationInFrames}
-          >
-            {/* IMPORTANT: no AbsoluteFill wrapper */}
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                zIndex: tracks.length - 1 - trackIndex,
-                pointerEvents: "none",
-                border: selectedClipId === clip.id ? "3px solid #4a9eff" : "none",
-                boxSizing: "border-box",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
+      {tracks.map((track, trackIndex) => {
+        // Sort clips by startFrame to ensure proper rendering order
+        const sortedClips = [...track.clips]
+          .filter(clip => {
+            // Filter out clips missing essential properties, but be lenient with src check
+            if (clip.type === "video" && !clip.src) return false;
+            if (clip.type === "audio" && !clip.src) return false;
+            // For images, allow rendering even if src check is iffy - we'll show error in render
+            return true;
+          })
+          .sort((a, b) => (a.startFrame || 0) - (b.startFrame || 0));
+        
+        return sortedClips.map((clip) => {
+          // Ensure startFrame is defined and valid
+          const startFrame = clip.startFrame ?? 0;
+          const durationInFrames = clip.durationInFrames ?? 90;
+          
+          
+          return (
+            <Sequence
+              key={clip.id}
+              from={startFrame}
+              durationInFrames={durationInFrames}
             >
-              {clip.type === "video" && (
-                <Video src={clip.src!} />
-              )}
+              <AbsoluteFill
+                style={{
+                  zIndex: tracks.length - 1 - trackIndex,
+                  pointerEvents: "none",
+                  border: selectedClipId === clip.id ? "3px solid #4a9eff" : "none",
+                  boxSizing: "border-box",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {clip.type === "video" && clip.src && (
+                  <Video 
+                    src={clip.src}
+                    startFrom={0}
+                    volume={1}
+                  />
+                )}
 
-              {clip.type === "image" && (
-                <Img src={clip.src!} />
-              )}
+                {clip.type === "image" && (
+                  clip.src ? (
+                    <Img 
+                      src={clip.src} 
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
+                    />
+                  ) : (
+                    <div style={{ color: "yellow", padding: 20, backgroundColor: "rgba(255,0,0,0.5)" }}>
+                      Image clip missing src: {clip.id || "unknown"}
+                    </div>
+                  )
+                )}
 
-              {clip.type === "audio" && (
-                <Audio src={clip.src!} />
-              )}
+                {clip.type === "audio" && clip.src && (
+                  <Audio src={clip.src} />
+                )}
 
-              {clip.type === "text" && (
-                <div
-                  style={{
-                    color: "white",
-                    fontSize: 80,
-                    textAlign: "center",
-                    marginTop: 200,
-                  }}
-                >
-                  {clip.text}
-                </div>
-              )}
+                {clip.type === "text" && (
+                  <div
+                    style={{
+                      color: "white",
+                      fontSize: 80,
+                      textAlign: "center",
+                      marginTop: 200,
+                    }}
+                  >
+                    {clip.text}
+                  </div>
+                )}
 
               {/* Resize handles for selected clip */}
               {selectedClipId === clip.id && (
@@ -185,10 +216,11 @@ export const TimelineComposition = ({
                   />
                 </>
               )}
-            </div>
-          </Sequence>
-        ))
-      )}
+              </AbsoluteFill>
+            </Sequence>
+          );
+        });
+      })}
     </AbsoluteFill>
   );
 };
