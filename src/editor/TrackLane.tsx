@@ -104,7 +104,9 @@ export const TrackLane = ({
           color: '#1a1a1a',
           textAlign: 'left'
         }}>
-          {track.name || `Track ${track.id.slice(0, 8)}`}
+          {track?.type==="video" ? ("Image/"+track.name || `Track ${track.id.slice(0, 8)}`) 
+          :
+          track.name || `Track ${track.id.slice(0, 8)}`}
         </span>
 
         <button

@@ -92,7 +92,7 @@ export const PlaybackControls = ({
       alignItems: 'center',
       justifyContent: 'center',
       gap: '16px',
-      padding: '12px 0',
+      padding: '12px 0px 12px 300px',
       backgroundColor: '#f5f5f5',
       borderTop: '1px solid #e0e0e0',
       borderBottom: '1px solid #e0e0e0',

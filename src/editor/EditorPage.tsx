@@ -1,6 +1,8 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { Player } from "@remotion/player";
 import type { PlayerRef } from "@remotion/player";
+import { DndContext, type DragEndEvent, type DragOverEvent, closestCenter } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import { Timeline } from "./Timeline";
 import { TimelineComposition } from "../remotion/TimelineComposition";
 import { Library } from "./Library";
@@ -19,6 +21,8 @@ export const EditorPage = () => {
   const [pendingTextClip, setPendingTextClip] = useState<{ trackId?: string } | null>(null);
   const [pendingFileUpload, setPendingFileUpload] = useState<{ trackId: string; trackType: string } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [dragPosition, setDragPosition] = useState<{ x: number; trackId: string | null } | null>(null);
+  const timelineContainerRef = useRef<HTMLDivElement>(null);
 
   // Library assets (separate from timeline clips)
   const [assets, setAssets] = useState<Clip[]>([]);
@@ -146,6 +150,110 @@ export const EditorPage = () => {
     addClipToTimeline(clip, trackId);
   }, [addClipToTimeline]);
 
+  // Handle drag end for library assets and timeline clips
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Check if dragging from library (asset has library-asset- prefix)
+    if (activeId.startsWith('library-asset-')) {
+      // Get asset from drag event data (more reliable than array lookup)
+      const dragData = active.data.current as { asset?: Clip } | undefined;
+      const assetFromData = dragData?.asset;
+      
+      // Fallback to array lookup if data is not available
+      const assetId = activeId.replace('library-asset-', '');
+      const asset = assetFromData || assets.find(a => a.id === assetId);
+      
+      if (!asset) return;
+
+      // Find the target track
+      const targetTrack = tracks.find(t => t.id === overId);
+      if (!targetTrack) return;
+
+      // Check if asset type is compatible with track type
+      // Images can go to video tracks
+      if (asset.type === "image" && targetTrack.type === "video") {
+        // Allow image to video track
+      } else if (asset.type === "video" && targetTrack.type === "video") {
+        // Allow video to video track
+      } else if (asset.type === "audio" && targetTrack.type === "audio") {
+        // Allow audio to audio track
+      } else if (asset.type === "text" && targetTrack.type === "text") {
+        // Allow text to text track
+      } else {
+        return; // Incompatible types
+      }
+
+      // Add clip to timeline track
+      addClipToTimeline(asset, targetTrack.id);
+      return;
+    }
+
+    // Handle timeline clip reordering within tracks
+    const sourceTrack = tracks.find(t => t.clips.some(c => c.id === activeId));
+    if (!sourceTrack) return;
+
+    const clip = sourceTrack.clips.find(c => c.id === activeId);
+    if (!clip) return;
+
+    // Check if dropping on another clip in the same track (reordering within same track)
+    const targetClipInSameTrack = sourceTrack.clips.find(c => c.id === overId);
+    if (targetClipInSameTrack) {
+      // Reorder clips within the same track using arrayMove
+      const oldIndex = sourceTrack.clips.findIndex(c => c.id === activeId);
+      const newIndex = sourceTrack.clips.findIndex(c => c.id === overId);
+      
+      if (oldIndex !== newIndex && oldIndex !== -1 && newIndex !== -1) {
+        setTracks(prevTracks => {
+          return prevTracks.map(track => {
+            if (track.id === sourceTrack.id) {
+              const reorderedClips = arrayMove([...track.clips], oldIndex, newIndex);
+              return {
+                ...track,
+                clips: recalculateStartFrames(reorderedClips),
+              };
+            }
+            return track;
+          });
+        });
+      }
+      return;
+    }
+
+    // Check if dropping on another track (moving between tracks)
+    const targetTrack = tracks.find(t => t.id === overId);
+    if (targetTrack && targetTrack.id !== sourceTrack.id) {
+      // Check if clip type is compatible with target track type
+      const clipTypeForMatching = clip.type === "image" ? "video" : clip.type;
+      if (targetTrack.type === clipTypeForMatching) {
+        setTracks(prevTracks => {
+          const newTracks = prevTracks.map(t => ({ ...t, clips: [...t.clips] })); // Deep copy clips
+
+          // Remove clip from source track
+          const sourceTrackIndex = newTracks.findIndex(t => t.id === sourceTrack.id);
+          if (sourceTrackIndex !== -1) {
+            newTracks[sourceTrackIndex].clips = newTracks[sourceTrackIndex].clips.filter(c => c.id !== activeId);
+            newTracks[sourceTrackIndex].clips = recalculateStartFrames(newTracks[sourceTrackIndex].clips);
+          }
+
+          // Add clip to target track
+          const targetTrackIndex = newTracks.findIndex(t => t.id === targetTrack.id);
+          if (targetTrackIndex !== -1) {
+            const clipToMove = { ...clip, startFrame: 0 }; // Reset startFrame, will be recalculated
+            newTracks[targetTrackIndex].clips = [...newTracks[targetTrackIndex].clips, clipToMove];
+            newTracks[targetTrackIndex].clips = recalculateStartFrames(newTracks[targetTrackIndex].clips);
+          }
+          return newTracks;
+        });
+      }
+      return;
+    }
+  }, [assets, tracks, addClipToTimeline, recalculateStartFrames]);
+
   // Handle text modal confirm
   const handleTextConfirm = useCallback((text: string) => {
     const textClip: Clip = {
@@ -185,12 +293,10 @@ export const EditorPage = () => {
     }
   }, []);
 
-  // Add clip to library (assets) and automatically add to timeline
+  // Add clip to library (assets only, not to timeline)
   const handleAddClipToLibrary = useCallback((clip: Clip) => {
     setAssets(prev => [...prev, clip]);
-    // Automatically add to timeline in the appropriate track
-    handleAddClipToTimeline(clip);
-  }, [handleAddClipToTimeline]);
+  }, []);
 
   // Handle file upload for track + button
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -364,11 +470,15 @@ export const EditorPage = () => {
 
   return (
     <>
+    <DndContext
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
     <div style={{
       display: 'flex',
       flexDirection: 'column',
       height: '100vh',
-      width: '100vw',
+      width: '80vw',
       backgroundColor: '#ffffff',
       overflow: 'hidden'
     }}>
@@ -509,6 +619,7 @@ export const EditorPage = () => {
         />
       </div>
     </div>
+    </DndContext>
 
     <TextInputModal
       isOpen={showTextModal}
