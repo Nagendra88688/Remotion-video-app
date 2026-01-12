@@ -50,9 +50,45 @@ export const SortableClip = ({ clip, fps, isSelected, onSelect, pixelsPerSecond 
     boxShadow: isSelected ? "0 2px 4px rgba(74, 158, 255, 0.2)" : "0 1px 2px rgba(0,0,0,0.1)",
   };
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onSelect();
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Call the dnd-kit listener first to allow drag detection
+    if (listeners?.onMouseDown) {
+      listeners.onMouseDown(e);
+    }
+    
+    // Track mouse position to distinguish clicks from drags
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let hasMoved = false;
+    
+    const handleMouseMove = () => {
+      hasMoved = true;
+    };
+    
+    const handleMouseUp = (upEvent: MouseEvent) => {
+      const deltaX = Math.abs(upEvent.clientX - startX);
+      const deltaY = Math.abs(upEvent.clientY - startY);
+      
+      // If mouse didn't move much (less than 3px), treat it as a click
+      if (!hasMoved && deltaX < 3 && deltaY < 3) {
+        // Use setTimeout to ensure this runs after drag handlers
+        setTimeout(() => {
+          onSelect();
+        }, 0);
+      }
+      
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Merge our handler with dnd-kit's listeners
+  const mergedListeners = {
+    ...listeners,
+    onMouseDown: handleMouseDown,
   };
 
   return (
@@ -60,8 +96,7 @@ export const SortableClip = ({ clip, fps, isSelected, onSelect, pixelsPerSecond 
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
-      onClick={handleClick}
+      {...mergedListeners}
     >
       {clip.type === "audio" ? `🎵 ${clip.name?.slice(0,20)}` : clip.name?.slice(0,10)}
     </div>
