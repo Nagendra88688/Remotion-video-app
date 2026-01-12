@@ -118,27 +118,7 @@ export const PlaybackControls = ({
         ⋮
       </button> */}
 
-      {/* Play/Pause button */}
-      <button
-        onClick={handlePlayPause}
-        style={{
-          width: '40px',
-          height: '40px',
-          borderRadius: '50%',
-          border: '1px solid #d0d0d0',
-          backgroundColor: '#ffffff',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '16px',
-          color: '#1a1a1a',
-          transition: 'all 0.2s'
-        }}
-        title={playing ? "Pause" : "Play"}
-      >
-        {playing ? "⏸" : "▶"}
-      </button>
+     
 
       {/* Reset button */}
       <button
@@ -160,6 +140,28 @@ export const PlaybackControls = ({
         title="Reset to beginning"
       >
         ⏮
+      </button>
+
+       {/* Play/Pause button */}
+       <button
+        onClick={handlePlayPause}
+        style={{
+          width: '40px',
+          height: '40px',
+          borderRadius: '50%',
+          border: '1px solid #d0d0d0',
+          backgroundColor: '#ffffff',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '16px',
+          color: '#1a1a1a',
+          transition: 'all 0.2s'
+        }}
+        title={playing ? "Pause" : "Play"}
+      >
+        {playing ? "⏸" : "▶"}
       </button>
 
       {/* Fullscreen button */}

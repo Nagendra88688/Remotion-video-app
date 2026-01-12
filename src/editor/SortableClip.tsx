@@ -32,7 +32,7 @@ export const SortableClip = ({ clip, fps, isSelected, onSelect, pixelsPerSecond 
     transform: CSS.Transform.toString(transform),
     transition,
     padding: 8,
-    background: isSelected ? "#e8f2ff" : "#ffffff",
+    background: isSelected ? "#e8f2ff" : "#d9dfff",
     border: isSelected ? "2px solid #4a9eff" : "1px solid #d0d0d0",
     color: isSelected ? "#1a1a1a" : "#666",
     width: `${width}px`,

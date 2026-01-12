@@ -12,6 +12,7 @@
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
+    "@remotion/media": "^4.0.404",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "remotion": "^4.0.404"

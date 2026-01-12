@@ -8,6 +8,8 @@ export type Clip = {
   startFrame?: number;          // ⬅ WHEN it starts
   durationInFrames: number;
   name?: string;
+  scaleX?: number;               // Horizontal scale (default: 1)
+  scaleY?: number;               // Vertical scale (default: 1)
 };
 
 export type Track = {

@@ -9,6 +9,7 @@ import { Library } from "./Library";
 import { PlaybackControls } from "./PlaybackControls";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { TextInputModal } from "./TextInputModal";
+import { ClipResizeOverlay } from "./ClipResizeOverlay";
 import type { Clip, Track } from "../remotion/types/timeline";
 
 export const EditorPage = () => {
@@ -150,8 +151,16 @@ export const EditorPage = () => {
     addClipToTimeline(clip, trackId);
   }, [addClipToTimeline]);
 
+  // Handle drag start - prevent auto-scrolling
+  const handleDragStart = useCallback(() => {
+    // Disable body scroll during drag
+    document.body.style.overflow = 'hidden';
+  }, []);
+
   // Handle drag end for library assets and timeline clips
   const handleDragEnd = useCallback((event: DragEndEvent) => {
+    // Re-enable body scroll after drag
+    document.body.style.overflow = '';
     const { active, over } = event;
     if (!over) return;
 
@@ -190,6 +199,23 @@ export const EditorPage = () => {
 
       // Add clip to timeline track
       addClipToTimeline(asset, targetTrack.id);
+      return;
+    }
+
+    // Handle track reordering (check if dragging a track)
+    const sourceTrackForReorder = tracks.find(t => t.id === activeId);
+    if (sourceTrackForReorder) {
+      // This is a track being dragged
+      const targetTrackForReorder = tracks.find(t => t.id === overId);
+      if (targetTrackForReorder && sourceTrackForReorder.id !== targetTrackForReorder.id) {
+        // Reorder tracks
+        const oldIndex = tracks.findIndex(t => t.id === activeId);
+        const newIndex = tracks.findIndex(t => t.id === overId);
+        
+        if (oldIndex !== newIndex && oldIndex !== -1 && newIndex !== -1) {
+          setTracks(prevTracks => arrayMove([...prevTracks], oldIndex, newIndex));
+        }
+      }
       return;
     }
 
@@ -406,45 +432,86 @@ export const EditorPage = () => {
     }
   }, [isPlaying]);
 
-  // Update currentFrame for playhead visualization (smooth updates)
+  // Handle clip resize from renderer
+  const handleClipResize = useCallback((clipId: string, newDurationInFrames: number, newScaleX?: number, newScaleY?: number) => {
+    setTracks(prevTracks => {
+      return prevTracks.map(track => {
+        const clipIndex = track.clips.findIndex(c => c.id === clipId);
+        if (clipIndex === -1) return track;
+        
+        const updatedClips = [...track.clips];
+        const updatedClip = {
+          ...updatedClips[clipIndex],
+          durationInFrames: Math.max(1, newDurationInFrames),
+        };
+        
+        // Update scale if provided
+        if (newScaleX !== undefined) {
+          updatedClip.scaleX = newScaleX;
+        }
+        if (newScaleY !== undefined) {
+          updatedClip.scaleY = newScaleY;
+        }
+        
+        updatedClips[clipIndex] = updatedClip;
+        
+        // Recalculate startFrames after duration change
+        return {
+          ...track,
+          clips: recalculateStartFrames(updatedClips),
+        };
+      });
+    });
+  }, [recalculateStartFrames]);
+
+  // Update playhead position for visual feedback during playback
+  // Use a very throttled interval to minimize interference with video playback
+  // Update less frequently and use requestAnimationFrame for better timing
   useEffect(() => {
     if (!isPlaying) return;
     
-    const fps = 30;
-    const frameDuration = 1000 / fps; // ~33.33ms per frame at 30fps
-    
-    // Use requestAnimationFrame for smooth, frame-synced updates
-    let animationFrameId: number;
+    let rafId: number;
     let lastUpdateTime = performance.now();
+    const updateInterval = 200; // Update every 200ms (5 times per second) - much less frequent
     
-    const updatePlayhead = (currentTime: number) => {
+    const updateFrame = (currentTime: number) => {
       const elapsed = currentTime - lastUpdateTime;
       
-      if (elapsed >= frameDuration) {
-        setCurrentFrame(prev => {
-          const framesToAdvance = Math.floor(elapsed / frameDuration);
-          const next = Math.min(prev + framesToAdvance, totalFrames - 1);
-          
-          if (next >= totalFrames - 1) {
-            // Automatically reset to beginning when reaching the end
-            handleReset();
-            return 0;
+      if (elapsed >= updateInterval) {
+        try {
+          // Only READ the player's current frame - don't try to control it
+          const playerFrame = (playerRef.current as any)?.getCurrentFrame?.();
+          if (playerFrame !== null && playerFrame !== undefined) {
+            const clampedFrame = Math.max(0, Math.min(Math.floor(playerFrame), totalFrames - 1));
+            
+            // Only update if frame actually changed significantly to minimize re-renders
+            setCurrentFrame(prev => {
+              // Only update if frame changed by at least 5 frames to reduce update frequency
+              if (Math.abs(prev - clampedFrame) >= 5 || clampedFrame >= totalFrames - 1) {
+                if (clampedFrame >= totalFrames - 1) {
+                  handleReset();
+                  return 0;
+                }
+                return clampedFrame;
+              }
+              return prev;
+            });
           }
-          
-          return next;
-        });
+        } catch (e) {
+          // Silently handle errors
+        }
         
-        lastUpdateTime = currentTime - (elapsed % frameDuration);
+        lastUpdateTime = currentTime - (elapsed % updateInterval);
       }
       
-      animationFrameId = requestAnimationFrame(updatePlayhead);
+      rafId = requestAnimationFrame(updateFrame);
     };
     
-    animationFrameId = requestAnimationFrame(updatePlayhead);
+    rafId = requestAnimationFrame(updateFrame);
 
     return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
+      if (rafId) {
+        cancelAnimationFrame(rafId);
       }
     };
   }, [isPlaying, totalFrames, handleReset]);
@@ -472,7 +539,9 @@ export const EditorPage = () => {
     <>
     <DndContext
       collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      autoScroll={false}
     >
     <div style={{
       display: 'flex',
@@ -568,13 +637,23 @@ export const EditorPage = () => {
         fps={30}
         compositionWidth={1280}
         compositionHeight={720}
-              controls={false}
+              // controls={true}
               style={{
                 width: '100%',
                 height: '100%',
                 maxWidth: '100%',
                 maxHeight: '100%'
               }}
+            />
+            <ClipResizeOverlay
+              selectedClip={selectedClip}
+              tracks={tracks}
+              fps={30}
+              currentFrame={currentFrame}
+              totalFrames={totalFrames}
+              compositionWidth={1280}
+              compositionHeight={720}
+              onResize={handleClipResize}
             />
           </div>
         </div>
