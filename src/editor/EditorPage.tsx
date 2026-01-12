@@ -35,7 +35,9 @@ export const EditorPage = () => {
   const [dragPosition, setDragPosition] = useState<{
     x: number;
     trackId: string | null;
+    frame: number;
   } | null>(null);
+  const currentMouseXRef = useRef<number>(0);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
 
   // Library assets (separate from timeline clips)
@@ -177,11 +179,81 @@ export const EditorPage = () => {
     [addClipToTimeline]
   );
 
+  // Track mouse position globally during drag
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      currentMouseXRef.current = e.clientX;
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
   // Handle drag start - prevent auto-scrolling
   const handleDragStart = useCallback(() => {
     // Disable body scroll during drag
     document.body.style.overflow = "hidden";
   }, []);
+
+  // Handle drag over - track mouse position to calculate drop frame
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      if (!over) {
+        setDragPosition(null);
+        return;
+      }
+
+      const overId = over.id as string;
+      const activeId = active.id.toString();
+      
+      // Check if dragging from library or dragging an existing clip
+      const isLibraryAsset = activeId.startsWith("library-asset-");
+      const sourceTrack = tracks.find((t) => t.clips.some((c) => c.id === activeId));
+      
+      // Find target track - could be the track itself or a clip's track
+      let targetTrack = tracks.find((t) => t.id === overId);
+      if (!targetTrack) {
+        // If overId is a clip, find its track
+        const clipTrack = tracks.find((t) => t.clips.some((c) => c.id === overId));
+        if (clipTrack) {
+          targetTrack = clipTrack;
+        }
+      }
+      
+      // Track position if dropping on a track (either from library or moving existing clip)
+      if (targetTrack && (isLibraryAsset || sourceTrack)) {
+        // Get the track element to calculate relative position
+        const trackElement = document.querySelector(`[data-track-id="${targetTrack.id}"]`) as HTMLElement;
+        if (trackElement) {
+          const rect = trackElement.getBoundingClientRect();
+          // Use the current mouse position from the ref
+          const mouseX = currentMouseXRef.current;
+          
+          // Calculate frame from position (accounting for 200px left panel in timeline)
+          const pixelsPerSecond = 60; // Default, matches Timeline
+          const fps = 30;
+          const leftPanelWidth = 200; // Width of track name panel
+          const relativeX = mouseX - rect.left;
+          const adjustedX = Math.max(0, relativeX - leftPanelWidth);
+          const seconds = adjustedX / pixelsPerSecond;
+          const frame = Math.floor(seconds * fps);
+          
+          setDragPosition({
+            x: mouseX,
+            trackId: targetTrack.id,
+            frame: frame,
+          });
+        }
+      } else {
+        setDragPosition(null);
+      }
+    },
+    [tracks]
+  );
 
   // Handle drag end for library assets and timeline clips
   const handleDragEnd = useCallback(
@@ -292,10 +364,25 @@ export const EditorPage = () => {
 
       // Check if dropping on another track (moving between tracks)
       const targetTrack = tracks.find((t) => t.id === overId);
-      if (targetTrack && targetTrack.id !== sourceTrack.id) {
+      if (targetTrack) {
         // Check if clip type is compatible with target track type
         const clipTypeForMatching = clip.type === "image" ? "video" : clip.type;
         if (targetTrack.type === clipTypeForMatching) {
+          // Calculate end position of target track (after all existing clips)
+          // Exclude the clip being moved from the calculation if it's already in the target track
+          const clipsToConsider = targetTrack.clips.filter((c) => c.id !== activeId);
+          let dropFrame = 0;
+          if (clipsToConsider.length > 0) {
+            // Find the maximum end frame of all clips in the target track (excluding the one being moved)
+            const maxEndFrame = Math.max(
+              ...clipsToConsider.map((c) => (c.startFrame || 0) + c.durationInFrames)
+            );
+            dropFrame = maxEndFrame;
+          } else {
+            // If track is empty (or only contains the clip being moved), place at the beginning
+            dropFrame = 0;
+          }
+
           setTracks((prevTracks) => {
             const newTracks = prevTracks.map((t) => ({
               ...t,
@@ -310,27 +397,103 @@ export const EditorPage = () => {
               newTracks[sourceTrackIndex].clips = newTracks[
                 sourceTrackIndex
               ].clips.filter((c) => c.id !== activeId);
-              newTracks[sourceTrackIndex].clips = recalculateStartFrames(
-                newTracks[sourceTrackIndex].clips
-              );
+              // Don't recalculate - allow gaps
             }
 
-            // Add clip to target track
+            // Add clip to target track at the end (after all existing clips)
             const targetTrackIndex = newTracks.findIndex(
               (t) => t.id === targetTrack.id
             );
             if (targetTrackIndex !== -1) {
-              const clipToMove = { ...clip, startFrame: 0 }; // Reset startFrame, will be recalculated
+              // Remove the clip from target track first if it's already there (moving back to original track)
+              newTracks[targetTrackIndex].clips = newTracks[targetTrackIndex].clips.filter(
+                (c) => c.id !== activeId
+              );
+              
+              // Recalculate end position after removing the clip
+              const remainingClips = newTracks[targetTrackIndex].clips;
+              if (remainingClips.length > 0) {
+                const maxEndFrame = Math.max(
+                  ...remainingClips.map((c) => (c.startFrame || 0) + c.durationInFrames)
+                );
+                dropFrame = maxEndFrame;
+              } else {
+                dropFrame = 0;
+              }
+              
+              const clipToMove = { ...clip, startFrame: dropFrame };
               newTracks[targetTrackIndex].clips = [
                 ...newTracks[targetTrackIndex].clips,
                 clipToMove,
               ];
-              newTracks[targetTrackIndex].clips = recalculateStartFrames(
-                newTracks[targetTrackIndex].clips
-              );
+              // Don't recalculate - allow clips to be at any position
             }
             return newTracks;
           });
+          setDragPosition(null);
+        }
+        return;
+      }
+
+      // Check if dropping on a clip in another track (place at end of track)
+      const targetClipInOtherTrack = tracks.find((t) => t.clips.some((c) => c.id === overId));
+      
+      if (targetClipInOtherTrack && targetClipInOtherTrack.id !== sourceTrack.id) {
+        const targetClip = targetClipInOtherTrack.clips.find((c) => c.id === overId);
+        if (targetClip) {
+          // Check if clip type is compatible with target track type
+          const clipTypeForMatching = clip.type === "image" ? "video" : clip.type;
+          if (targetClipInOtherTrack.type === clipTypeForMatching) {
+            setTracks((prevTracks) => {
+              const newTracks = prevTracks.map((t) => ({
+                ...t,
+                clips: [...t.clips],
+              })); // Deep copy clips
+
+              // Remove clip from source track
+              const sourceTrackIndex = newTracks.findIndex(
+                (t) => t.id === sourceTrack.id
+              );
+              if (sourceTrackIndex !== -1) {
+                newTracks[sourceTrackIndex].clips = newTracks[
+                  sourceTrackIndex
+                ].clips.filter((c) => c.id !== activeId);
+                // Don't recalculate - allow gaps
+              }
+
+              // Add clip to target track at the end (after all existing clips)
+              const targetTrackIndex = newTracks.findIndex(
+                (t) => t.id === targetClipInOtherTrack.id
+              );
+              if (targetTrackIndex !== -1) {
+                // Remove the clip from target track first if it's already there (moving back to original track)
+                newTracks[targetTrackIndex].clips = newTracks[targetTrackIndex].clips.filter(
+                  (c) => c.id !== activeId
+                );
+                
+                // Calculate end position after removing the clip
+                const remainingClips = newTracks[targetTrackIndex].clips;
+                let dropFrame = 0;
+                if (remainingClips.length > 0) {
+                  const maxEndFrame = Math.max(
+                    ...remainingClips.map((c) => (c.startFrame || 0) + c.durationInFrames)
+                  );
+                  dropFrame = maxEndFrame;
+                } else {
+                  dropFrame = 0;
+                }
+                
+                const clipToMove = { ...clip, startFrame: dropFrame };
+                newTracks[targetTrackIndex].clips = [
+                  ...newTracks[targetTrackIndex].clips,
+                  clipToMove,
+                ];
+                // Don't recalculate - allow clips to be at any position
+              }
+              return newTracks;
+            });
+            setDragPosition(null);
+          }
         }
         return;
       }
@@ -630,6 +793,7 @@ export const EditorPage = () => {
       <DndContext
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
         autoScroll={false}
       >
