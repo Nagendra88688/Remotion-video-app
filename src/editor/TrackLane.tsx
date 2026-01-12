@@ -11,6 +11,7 @@ interface Props {
   onAddClip?: (trackId: string, type?: string) => void;
   onDeleteTrack?: (trackId: string) => void;
   pixelsPerSecond?: number;
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }
 
 const getTrackColor = (type?: string) => {
@@ -35,7 +36,8 @@ export const TrackLane = ({
   onClipSelect,
   onAddClip,
   onDeleteTrack,
-  pixelsPerSecond = 60
+  pixelsPerSecond = 60,
+  dragHandleProps
 }: Props) => {
   const { setNodeRef, isOver } = useDroppable({
     id: track.id,
@@ -55,8 +57,9 @@ export const TrackLane = ({
     ? Math.max(...track.clips.map(calculateClipEndPosition))
     : 0;
   
-  // Add some padding (20px) to ensure clips don't touch the edge
-  const timelineWidth = Math.max(maxEndPosition + 20, 200); // Minimum 200px width
+  // Add extra padding (100px) to ensure there's always space to add new clips
+  // This ensures that even after adding lengthy videos, new clips can still be added
+  const timelineWidth = Math.max(maxEndPosition + 100, 200); // Minimum 200px width, +100px padding for new clips
   const trackColor = getTrackColor(track.type);
 
   return (
@@ -83,19 +86,24 @@ export const TrackLane = ({
         borderRight: `1px solid ${trackColor.border}`,
         backgroundColor: '#ffffff'
       }}>
-        {/* <button
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px',
-            fontSize: '16px',
-            color: '#666'
-          }}
-          title="Track options"
-        >
-          ⋮
-        </button> */}
+        {/* Drag handle for track reordering */}
+        {dragHandleProps && (
+          <div
+            {...dragHandleProps}
+            style={{
+              cursor: 'grab',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '4px',
+              color: '#999',
+              fontSize: '14px',
+              userSelect: 'none'
+            }}
+            title="Drag to reorder track"
+          >
+            ⋮⋮
+          </div>
+        )}
         
         <span style={{
           flex: 1,

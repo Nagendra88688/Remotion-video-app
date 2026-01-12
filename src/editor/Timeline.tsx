@@ -6,11 +6,12 @@ import {
 import {
   SortableContext,
   horizontalListSortingStrategy,
+  verticalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
 import { useState, useMemo, useRef, useEffect } from "react";
 import type { Track, Clip } from "../remotion/types/timeline";
-import { TrackLane } from "./TrackLane";
+import { SortableTrack } from "./SortableTrack";
 
 interface TimelineProps {
   tracks: Track[];
@@ -145,13 +146,46 @@ export const Timeline = ({
         maxEnd = Math.max(maxEnd, end);
       });
     });
-    return Math.max((maxEnd / fps) * pixelsPerSecond, 800);
+    // Add extra padding (equivalent to 3 seconds) to ensure there's always space for new clips
+    const extraPadding = (3 * fps / fps) * pixelsPerSecond; // 3 seconds worth of space
+    return Math.max((maxEnd / fps) * pixelsPerSecond + extraPadding, 800);
   };
 
   const timelineWidth = getMaxTimelineWidth();
   // Use dragFrame for immediate visual feedback during dragging, otherwise use currentFrame
   const displayFrame = isDragging && dragFrame !== null ? dragFrame : currentFrame;
   const playheadPosition = (displayFrame / fps) * pixelsPerSecond;
+
+  // Auto-scroll timeline to keep playhead visible
+  useEffect(() => {
+    if (!tracksContainerRef.current || isDragging) return; // Don't auto-scroll while dragging
+    
+    const container = tracksContainerRef.current;
+    const playheadAbsolutePosition = 200 + playheadPosition; // 200px left panel + playhead position
+    
+    // Get visible area bounds
+    const containerRect = container.getBoundingClientRect();
+    const scrollLeft = container.scrollLeft;
+    const visibleStart = scrollLeft;
+    const visibleEnd = scrollLeft + containerRect.width;
+    
+    // Calculate playhead position relative to container
+    const playheadRelativePosition = playheadAbsolutePosition - 200; // Subtract left panel width
+    
+    // Check if playhead is outside visible area
+    const margin = 100; // Keep playhead at least 100px from edges
+    const shouldScroll = playheadRelativePosition < visibleStart + margin || 
+                        playheadRelativePosition > visibleEnd - margin;
+    
+    if (shouldScroll) {
+      // Calculate target scroll position to center playhead in view
+      const targetScroll = playheadRelativePosition - (containerRect.width / 2);
+      container.scrollTo({
+        left: Math.max(0, targetScroll),
+        behavior: 'smooth'
+      });
+    }
+  }, [playheadPosition, pixelsPerSecond, isDragging]);
 
   const formatTime = (frames: number) => {
     const seconds = frames / fps;
@@ -436,7 +470,11 @@ export const Timeline = ({
           position: 'relative'
         }}
       >
-        <div>
+        <div style={{
+          position: 'relative',
+          minWidth: `${timelineWidth + 200}px`, // Full timeline width + left panel width
+          height: '100%'
+        }}>
           {/* Playhead line across all tracks */}
           <div style={{
             position: 'absolute',
@@ -449,23 +487,28 @@ export const Timeline = ({
             pointerEvents: 'none'
           }} />
           
-          {tracks.map((track) => (
-            <SortableContext
-              key={track.id}
-              items={track.clips.map(c => c.id)}
-              strategy={horizontalListSortingStrategy}
-            >
-              <TrackLane 
-                track={track} 
-                fps={fps} 
-                selectedClipId={selectedClipId}
-                onClipSelect={onClipSelect}
-                onAddClip={handleAddClipToTrack}
-                onDeleteTrack={handleDeleteTrack}
-                pixelsPerSecond={pixelsPerSecond}
-              />
-            </SortableContext>
-          ))}
+          <SortableContext
+            items={tracks.map(t => t.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {tracks.map((track) => (
+              <SortableContext
+                key={track.id}
+                items={track.clips.map(c => c.id)}
+                strategy={horizontalListSortingStrategy}
+              >
+                <SortableTrack
+                  track={track}
+                  fps={fps}
+                  selectedClipId={selectedClipId}
+                  onClipSelect={onClipSelect}
+                  onAddClip={handleAddClipToTrack}
+                  onDeleteTrack={handleDeleteTrack}
+                  pixelsPerSecond={pixelsPerSecond}
+                />
+              </SortableContext>
+            ))}
+          </SortableContext>
         </div>
       </div>
 

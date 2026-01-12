@@ -1,10 +1,13 @@
+import { useMemo } from "react";
 import {
   AbsoluteFill,
   Sequence,
-  Video,
+  OffthreadVideo,
   Img,
-  Audio,
+  Html5Audio,
+  // Video,
 } from "remotion";
+import {Video} from '@remotion/media';
 import type { Track } from "../remotion/types/timeline";
 
 export const TimelineComposition = ({
@@ -14,35 +17,49 @@ export const TimelineComposition = ({
   tracks: Track[];
   selectedClipId: string | null;
 }) => {
+  // Flatten all clips from all tracks into a single array
+  const allClips = useMemo(() => {
+    return tracks.flatMap((track, trackIndex) => {
+      // Sort clips by startFrame to ensure proper rendering order
+      const sortedClips = [...track.clips]
+        .filter(clip => {
+          // Filter out clips missing essential properties, but be lenient with src check
+          if (clip.type === "video" && !clip.src) return false;
+          if (clip.type === "audio" && !clip.src) return false;
+          if (clip.type === "text" && !clip.text) return false;
+          // For images, allow rendering even if src check is iffy - we'll show error in render
+          return true;
+        })
+        .sort((a, b) => (a.startFrame || 0) - (b.startFrame || 0));
+      console.log({test: track});
+      
+      return sortedClips.map((clip, clipIndex) => ({ clip, trackIndex, clipIndex }));
+    });
+  }, [tracks]);
+  console.log({allClips});
+  
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
-      {tracks.map((track, trackIndex) => {
-        // Sort clips by startFrame to ensure proper rendering order
-        const sortedClips = [...track.clips]
-          .filter(clip => {
-            // Filter out clips missing essential properties, but be lenient with src check
-            if (clip.type === "video" && !clip.src) return false;
-            if (clip.type === "audio" && !clip.src) return false;
-            // For images, allow rendering even if src check is iffy - we'll show error in render
-            return true;
-          })
-          .sort((a, b) => (a.startFrame || 0) - (b.startFrame || 0));
-        
-        return sortedClips.map((clip) => {
+      {allClips.map(({ clip, trackIndex, clipIndex }) => {
           // Ensure startFrame is defined and valid
           const startFrame = clip.startFrame ?? 0;
           const durationInFrames = clip.durationInFrames ?? 90;
           
+          // Calculate unique z-index: base z-index per track + clip index within track
+          // This ensures clips from the same track are properly layered
+          const baseZIndex = (tracks.length - 1 - trackIndex) * 1000;
+          const clipZIndex = baseZIndex + clipIndex;
           
           return (
             <Sequence
               key={clip.id}
               from={startFrame}
               durationInFrames={durationInFrames}
+              premountFor={30}
             >
               <AbsoluteFill
                 style={{
-                  zIndex: tracks.length - 1 - trackIndex,
+                  zIndex: clipZIndex,
                   pointerEvents: "none",
                   border: selectedClipId === clip.id ? "3px solid #4a9eff" : "none",
                   boxSizing: "border-box",
@@ -50,13 +67,15 @@ export const TimelineComposition = ({
                   alignItems: "center",
                   justifyContent: "center",
                   overflow: "hidden",
-                }}
-              >
-                {clip.type === "video" && clip.src && (
+                  transform: `scale(${clip.scaleX ?? 1}, ${clip.scaleY ?? 1})`,
+                  transformOrigin: "center center",
+                  }}
+                >
+                  {clip.type === "video" && clip.src && (
                   <Video 
                     src={clip.src}
-                    startFrom={0}
                     volume={1}
+                    muted={false}
                     style={{
                       width: "100%",
                       height: "100%",
@@ -83,7 +102,7 @@ export const TimelineComposition = ({
                 )}
 
                 {clip.type === "audio" && clip.src && (
-                  <Audio src={clip.src} />
+                  <Html5Audio src={clip.src} />
                 )}
 
                 {clip.type === "text" && (
@@ -225,8 +244,7 @@ export const TimelineComposition = ({
               </AbsoluteFill>
             </Sequence>
           );
-        });
-      })}
+        })}
     </AbsoluteFill>
   );
 };
