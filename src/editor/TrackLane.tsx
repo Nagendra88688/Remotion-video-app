@@ -71,7 +71,7 @@ export const TrackLane = ({
         alignItems: 'center',
         marginBottom: 4,
         position: "relative",
-        minHeight: 56,
+        minHeight: 40,
         backgroundColor: trackColor.bg,
         border: `1px solid ${trackColor.border}`,
         borderRadius: '4px',
@@ -82,8 +82,8 @@ export const TrackLane = ({
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '8px',
-        padding: '8px 12px',
+        gap: '6px',
+        padding: '6px 10px',
         minWidth: '175px',
         borderRight: `1px solid ${trackColor.border}`,
         backgroundColor: '#ffffff'
@@ -160,7 +160,7 @@ export const TrackLane = ({
       <div style={{ 
         flex: 1, 
         position: 'relative', 
-        minHeight: 56,
+        minHeight: 40,
         overflowX: 'auto',
         overflowY: 'hidden'
       }}>
@@ -170,7 +170,7 @@ export const TrackLane = ({
             position: "relative", 
             width: `${timelineWidth}px`, 
             minWidth: '100%',
-            minHeight: 56,
+            minHeight: 40,
             height: "100%",
             backgroundColor: isOver ? 'rgba(74, 158, 255, 0.1)' : 'transparent'
           }}
