@@ -688,13 +688,15 @@ export const EditorPage = () => {
     }
   }, [isPlaying]);
 
-  // Handle clip resize from renderer
+  // Handle clip resize and position from renderer
   const handleClipResize = useCallback(
     (
       clipId: string,
       newDurationInFrames: number,
       newScaleX?: number,
-      newScaleY?: number
+      newScaleY?: number,
+      newX?: number,
+      newY?: number
     ) => {
       setTracks((prevTracks) => {
         return prevTracks.map((track) => {
@@ -713,6 +715,13 @@ export const EditorPage = () => {
           }
           if (newScaleY !== undefined) {
             updatedClip.scaleY = newScaleY;
+          }
+          // Update position if provided
+          if (newX !== undefined) {
+            updatedClip.x = newX;
+          }
+          if (newY !== undefined) {
+            updatedClip.y = newY;
           }
 
           updatedClips[clipIndex] = updatedClip;
@@ -939,6 +948,7 @@ export const EditorPage = () => {
                   totalFrames={totalFrames}
                   compositionWidth={1280}
                   compositionHeight={720}
+                  isPlaying={isPlaying}
                   onResize={handleClipResize}
                 />
               </div>

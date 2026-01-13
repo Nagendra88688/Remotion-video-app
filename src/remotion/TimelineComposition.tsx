@@ -67,7 +67,7 @@ export const TimelineComposition = ({
                   alignItems: "center",
                   justifyContent: "center",
                   overflow: "hidden",
-                  transform: `scale(${clip.scaleX ?? 1}, ${clip.scaleY ?? 1})`,
+                  transform: `translate(${clip.x ?? 0}px, ${clip.y ?? 0}px) scale(${clip.scaleX ?? 1}, ${clip.scaleY ?? 1})`,
                   transformOrigin: "center center",
                   }}
                 >

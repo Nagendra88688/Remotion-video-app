@@ -9,7 +9,8 @@ interface ClipResizeOverlayProps {
   totalFrames: number;
   compositionWidth: number;
   compositionHeight: number;
-  onResize: (clipId: string, newDurationInFrames: number, newScaleX?: number, newScaleY?: number) => void;
+  isPlaying: boolean;
+  onResize: (clipId: string, newDurationInFrames: number, newScaleX?: number, newScaleY?: number, newX?: number, newY?: number) => void;
 }
 
 export const ClipResizeOverlay = ({
@@ -20,16 +21,24 @@ export const ClipResizeOverlay = ({
   totalFrames,
   compositionWidth,
   compositionHeight,
+  isPlaying,
   onResize,
 }: ClipResizeOverlayProps) => {
   const [isResizing, setIsResizing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<'right' | 'left' | 'top' | 'bottom' | 'corner' | null>(null);
   const [initialDuration, setInitialDuration] = useState(0);
   const [initialFrame, setInitialFrame] = useState(0);
   const [initialScaleX, setInitialScaleX] = useState(1);
   const [initialScaleY, setInitialScaleY] = useState(1);
+  const [initialX, setInitialX] = useState(0);
+  const [initialY, setInitialY] = useState(0);
   const [aspectRatio, setAspectRatio] = useState(1); // Store aspect ratio to maintain it
+  const [dragOffsetX, setDragOffsetX] = useState(0); // Local state for smooth visual feedback during drag
+  const [dragOffsetY, setDragOffsetY] = useState(0); // Local state for smooth visual feedback during drag
   const overlayRef = useRef<HTMLDivElement>(null);
+  const dragUpdateRef = useRef<{ x: number; y: number } | null>(null); // Store pending updates
+  const rafIdRef = useRef<number | null>(null); // Store RAF ID for cleanup
 
   // Find which track contains the selected clip
   const track = selectedClip ? tracks.find(t => t.clips.some(c => c.id === selectedClip.id)) : null;
@@ -39,16 +48,23 @@ export const ClipResizeOverlay = ({
   const endFrame = startFrame + durationInFrames;
   const scaleX = selectedClip?.scaleX ?? 1;
   const scaleY = selectedClip?.scaleY ?? 1;
+  const clipX = selectedClip?.x ?? 0; // X position (0 = centered)
+  const clipY = selectedClip?.y ?? 0; // Y position (0 = centered)
 
   // Calculate if the clip is currently visible at currentFrame
-  const isVisible = selectedClip ? (currentFrame >= startFrame && currentFrame < endFrame) : false;
+  const isClipVisibleAtFrame = selectedClip ? (currentFrame >= startFrame && currentFrame < endFrame) : false;
+  // Show resize borders when clip is selected and visible, but hide during playback
+  const shouldShowBorders = selectedClip && !isPlaying && isClipVisibleAtFrame;
 
   // Calculate position and size of the clip in the renderer
-  // The clip fills the entire canvas when visible
-  const clipLeft = 0;
-  const clipTop = 0;
+  // The clip is centered by default, but can be moved with x and y offsets
   const clipWidth = compositionWidth;
   const clipHeight = compositionHeight;
+  // Calculate the actual position: center + offset + drag offset (for smooth visual feedback)
+  const currentX = clipX + (isDragging ? dragOffsetX : 0);
+  const currentY = clipY + (isDragging ? dragOffsetY : 0);
+  const clipLeft = (compositionWidth / 2) + currentX - (clipWidth / 2);
+  const clipTop = (compositionHeight / 2) + currentY - (clipHeight / 2);
 
   // Handle resize start
   const handleResizeStart = (e: React.MouseEvent, handle: 'right' | 'left' | 'top' | 'bottom' | 'corner') => {
@@ -168,7 +184,7 @@ export const ClipResizeOverlay = ({
         }
       }
       
-      onResize(selectedClip.id, durationInFrames, newScaleX, newScaleY);
+      onResize(selectedClip.id, durationInFrames, newScaleX, newScaleY, clipX, clipY);
     };
 
     const handleMouseUp = () => {
@@ -184,9 +200,114 @@ export const ClipResizeOverlay = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizing, resizeHandle, initialScaleX, initialScaleY, aspectRatio, selectedClip, onResize, compositionWidth, compositionHeight, durationInFrames, clipWidth, clipHeight]);
+  }, [isResizing, resizeHandle, initialScaleX, initialScaleY, aspectRatio, selectedClip, onResize, compositionWidth, compositionHeight, durationInFrames, clipWidth, clipHeight, clipX, clipY]);
 
-  if (!selectedClip || !track || !isVisible) return null;
+  // Handle drag start for moving the clip
+  const handleDragStart = (e: React.MouseEvent) => {
+    if (!selectedClip || isResizing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+    setInitialX(clipX);
+    setInitialY(clipY);
+    setDragOffsetX(0);
+    setDragOffsetY(0);
+    dragUpdateRef.current = null;
+  };
+
+  // Handle drag during move - optimized with requestAnimationFrame
+  useEffect(() => {
+    if (!isDragging || !selectedClip || !overlayRef.current) return;
+
+    let startMouseX = 0;
+    let startMouseY = 0;
+    let hasStarted = false;
+    let lastUpdateTime = 0;
+    const updateThrottle = 16; // ~60fps (16ms per frame) for state updates
+    let pendingUpdate: { x: number; y: number } | null = null;
+
+    // Function to apply pending state update
+    const applyPendingUpdate = () => {
+      if (pendingUpdate && selectedClip) {
+        onResize(selectedClip.id, durationInFrames, scaleX, scaleY, pendingUpdate.x, pendingUpdate.y);
+        pendingUpdate = null;
+        lastUpdateTime = performance.now();
+      }
+      rafIdRef.current = null;
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!overlayRef.current || !selectedClip) return;
+
+      if (!hasStarted) {
+        const rect = overlayRef.current.getBoundingClientRect();
+        // Get the center of the clip content area
+        startMouseX = rect.left + (compositionWidth / 2) + clipX;
+        startMouseY = rect.top + (compositionHeight / 2) + clipY;
+        hasStarted = true;
+      }
+
+      const currentMouseX = e.clientX;
+      const currentMouseY = e.clientY;
+      const deltaX = currentMouseX - startMouseX;
+      const deltaY = currentMouseY - startMouseY;
+
+      // Calculate new position (clamp to keep clip within bounds)
+      const scaledWidth = clipWidth * scaleX;
+      const scaledHeight = clipHeight * scaleY;
+      const maxX = (compositionWidth - scaledWidth) / 2;
+      const maxY = (compositionHeight - scaledHeight) / 2;
+      
+      const newX = Math.max(-maxX, Math.min(maxX, initialX + deltaX));
+      const newY = Math.max(-maxY, Math.min(maxY, initialY + deltaY));
+
+      // Update visual position immediately (local state, no re-render of parent)
+      setDragOffsetX(newX - clipX);
+      setDragOffsetY(newY - clipY);
+
+      // Throttle actual state updates using requestAnimationFrame
+      pendingUpdate = { x: newX, y: newY };
+      
+      const now = performance.now();
+      if (now - lastUpdateTime >= updateThrottle) {
+        // Update immediately if enough time has passed
+        applyPendingUpdate();
+      } else if (rafIdRef.current === null) {
+        // Schedule update for next frame
+        rafIdRef.current = requestAnimationFrame(applyPendingUpdate);
+      }
+    };
+
+    const handleMouseUp = () => {
+      // Final update to ensure exact position
+      if (pendingUpdate && selectedClip) {
+        onResize(selectedClip.id, durationInFrames, scaleX, scaleY, pendingUpdate.x, pendingUpdate.y);
+        pendingUpdate = null;
+      }
+      setIsDragging(false);
+      setDragOffsetX(0);
+      setDragOffsetY(0);
+      hasStarted = false;
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [isDragging, initialX, initialY, selectedClip, onResize, compositionWidth, compositionHeight, durationInFrames, scaleX, scaleY, clipWidth, clipHeight, clipX, clipY]);
+
+  if (!shouldShowBorders) return null;
 
   const handleSize = 12;
   const handleOffset = 6;
@@ -200,7 +321,7 @@ export const ClipResizeOverlay = ({
         top: 0,
         width: '100%',
         height: '100%',
-        pointerEvents: isResizing ? 'auto' : 'none',
+        pointerEvents: (isResizing || isDragging) ? 'auto' : 'none',
         zIndex: 1000,
       }}
     >
@@ -215,6 +336,21 @@ export const ClipResizeOverlay = ({
           border: '3px solid #4a9eff',
           boxSizing: 'border-box',
           pointerEvents: 'none',
+        }}
+      />
+
+      {/* Draggable area for moving the clip (the inner content area) */}
+      <div
+        onMouseDown={handleDragStart}
+        style={{
+          position: 'absolute',
+          left: `${clipLeft}px`,
+          top: `${clipTop}px`,
+          width: `${clipWidth}px`,
+          height: `${clipHeight}px`,
+          cursor: isDragging ? 'grabbing' : 'grab',
+          pointerEvents: isResizing ? 'none' : 'auto',
+          zIndex: 999,
         }}
       />
 
