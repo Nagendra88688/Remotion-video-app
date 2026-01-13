@@ -43,6 +43,7 @@ export const EditorPage = () => {
     frame: number;
   } | null>(null);
   const [activeDragAsset, setActiveDragAsset] = useState<Clip | null>(null);
+  const [activeDragTrack, setActiveDragTrack] = useState<Track | null>(null);
   const currentMouseXRef = useRef<number>(0);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +73,7 @@ export const EditorPage = () => {
   ]);
 
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-
+  
   // Calculate total duration based on all clips in all tracks
   const totalFrames = useMemo(() => {
     let maxEnd = 0;
@@ -198,23 +199,32 @@ export const EditorPage = () => {
     };
   }, []);
 
-  // Handle drag start - prevent auto-scrolling and track dragged asset
+  // Handle drag start - prevent auto-scrolling and track dragged asset/track
   const handleDragStart = useCallback((event: DragStartEvent) => {
     // Disable body scroll during drag
     document.body.style.overflow = "hidden";
     
-    // Track which asset is being dragged for preview
+    // Track which asset or track is being dragged for preview
     const activeId = event.active.id.toString();
     if (activeId.startsWith("library-asset-")) {
       const assetId = activeId.replace("library-asset-", "");
       const asset = assets.find((a) => a.id === assetId);
       if (asset) {
         setActiveDragAsset(asset);
+        setActiveDragTrack(null);
       }
     } else {
-      setActiveDragAsset(null);
+      // Check if it's a track being dragged
+      const track = tracks.find((t) => t.id === activeId);
+      if (track) {
+        setActiveDragTrack(track);
+        setActiveDragAsset(null);
+      } else {
+        setActiveDragAsset(null);
+        setActiveDragTrack(null);
+      }
     }
-  }, [assets]);
+  }, [assets, tracks]);
 
   // Handle drag over - track mouse position to calculate drop frame
   const handleDragOver = useCallback(
@@ -277,6 +287,7 @@ export const EditorPage = () => {
   const handleDragCancel = useCallback(() => {
     document.body.style.overflow = "";
     setActiveDragAsset(null);
+    setActiveDragTrack(null);
   }, []);
 
   // Handle drag end for library assets and timeline clips
@@ -284,6 +295,7 @@ export const EditorPage = () => {
     (event: DragEndEvent) => {
       // Clear drag preview immediately (before any other logic)
       setActiveDragAsset(null);
+      setActiveDragTrack(null);
       // Re-enable body scroll after drag
       document.body.style.overflow = "";
       const { active, over } = event;
@@ -993,14 +1005,14 @@ export const EditorPage = () => {
                   maxWidth: "100%",
                 }}
               >
-                <Player
+      <Player
                   ref={playerRef}
-                  component={TimelineComposition}
-                  inputProps={{ tracks, selectedClipId }}
-                  durationInFrames={totalFrames}
-                  fps={30}
-                  compositionWidth={1280}
-                  compositionHeight={720}
+        component={TimelineComposition}
+        inputProps={{ tracks, selectedClipId }}
+        durationInFrames={totalFrames}
+        fps={30}
+        compositionWidth={1280}
+        compositionHeight={720}
                   // controls={true}
                   style={{
                     width: "100%",
@@ -1048,12 +1060,12 @@ export const EditorPage = () => {
               overflow: "hidden",
             }}
           >
-            <Timeline
-              tracks={tracks}
-              setTracks={setTracks}
-              fps={30}
-              selectedClipId={selectedClipId}
-              onClipSelect={setSelectedClipId}
+      <Timeline 
+        tracks={tracks}
+        setTracks={setTracks}
+        fps={30}
+        selectedClipId={selectedClipId}
+        onClipSelect={setSelectedClipId}
               currentFrame={currentFrame}
               onAddClipFromLibrary={handleAddClipToTimeline}
               onSeek={handleSeek}
@@ -1164,6 +1176,45 @@ export const EditorPage = () => {
               </span>
             </div>
         </DragOverlay>}
+        {activeDragTrack && (
+          <DragOverlay>
+            <div
+              style={{
+                padding: '6px 10px',
+                border: '2px solid #4a9eff',
+                borderRadius: '4px',
+                backgroundColor: '#e8f2ff',
+                boxShadow: '0 2px 8px rgba(74, 158, 255, 0.3)',
+                minWidth: '175px',
+                opacity: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span style={{
+                fontSize: '14px',
+                fontWeight: 500,
+                color: '#1a1a1a',
+              }}>
+                {activeDragTrack.type === "video" 
+                  ? `Image/${activeDragTrack.name || `Track ${activeDragTrack.id.slice(0, 8)}`}`
+                  : activeDragTrack.name || `Track ${activeDragTrack.id.slice(0, 8)}`}
+              </span>
+              {activeDragTrack.type === "audio" && (
+                <span style={{ fontSize: '16px' }}>🎵</span>
+              )}
+              <span style={{
+                fontSize: '11px',
+                color: '#666',
+                textTransform: 'capitalize',
+                marginLeft: 'auto',
+              }}>
+                {activeDragTrack.clips.length} clip{activeDragTrack.clips.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </DragOverlay>
+        )}
       </DndContext>
 
       <TextInputModal
