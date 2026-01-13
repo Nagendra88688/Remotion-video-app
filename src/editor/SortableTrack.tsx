@@ -10,6 +10,7 @@ interface SortableTrackProps {
   onClipSelect: (clipId: string | null) => void;
   onAddClip?: (trackId: string, type?: string) => void;
   onDeleteTrack?: (trackId: string) => void;
+  onDeleteClip?: (clipId: string) => void;
   pixelsPerSecond?: number;
 }
 
@@ -20,6 +21,7 @@ export const SortableTrack = ({
   onClipSelect,
   onAddClip,
   onDeleteTrack,
+  onDeleteClip,
   pixelsPerSecond,
 }: SortableTrackProps) => {
   const {
@@ -46,6 +48,7 @@ export const SortableTrack = ({
         onClipSelect={onClipSelect}
         onAddClip={onAddClip}
         onDeleteTrack={onDeleteTrack}
+        onDeleteClip={onDeleteClip}
         pixelsPerSecond={pixelsPerSecond}
         dragHandleProps={{ ...attributes, ...listeners }}
       />

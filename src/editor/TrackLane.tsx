@@ -10,6 +10,7 @@ interface Props {
   onClipSelect: (clipId: string | null) => void;
   onAddClip?: (trackId: string, type?: string) => void;
   onDeleteTrack?: (trackId: string) => void;
+  onDeleteClip?: (clipId: string) => void;
   pixelsPerSecond?: number;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }
@@ -36,6 +37,7 @@ export const TrackLane = ({
   onClipSelect,
   onAddClip,
   onDeleteTrack,
+  onDeleteClip,
   pixelsPerSecond = 60,
   dragHandleProps
 }: Props) => {
@@ -180,6 +182,7 @@ export const TrackLane = ({
               fps={fps}
               isSelected={selectedClipId === clip.id}
               onSelect={() => onClipSelect(clip.id)}
+              onDelete={() => onDeleteClip?.(clip.id)}
               pixelsPerSecond={pixelsPerSecond}
             />
           ))}

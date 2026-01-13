@@ -688,6 +688,38 @@ export const EditorPage = () => {
     }
   }, [isPlaying]);
 
+  // Handle clip deletion
+  const handleDeleteClip = useCallback((clipId: string) => {
+    setTracks((prevTracks) => {
+      return prevTracks.map((track) => {
+        // Check if this track contains the clip to delete
+        const clipToDelete = track.clips.find((c) => c.id === clipId);
+        if (!clipToDelete) {
+          return track; // Clip not in this track, return unchanged
+        }
+        
+        // Filter out the deleted clip
+        const updatedClips = track.clips.filter((c) => c.id !== clipId);
+        
+        // Sort clips by startFrame before recalculating
+        const sortedClips = [...updatedClips].sort((a, b) => (a.startFrame || 0) - (b.startFrame || 0));
+        
+        // Recalculate startFrames for remaining clips to fill the gap
+        const recalculatedClips = recalculateStartFrames(sortedClips);
+        
+        // If the deleted clip was selected, clear selection
+        if (selectedClipId === clipId) {
+          setSelectedClipId(null);
+        }
+        
+        return {
+          ...track,
+          clips: recalculatedClips,
+        };
+      });
+    });
+  }, [selectedClipId, recalculateStartFrames]);
+
   // Handle clip resize and position from renderer
   const handleClipResize = useCallback(
     (
@@ -993,6 +1025,7 @@ export const EditorPage = () => {
                 setShowTextModal(true);
               }}
               onOpenFileUpload={handleOpenFileUpload}
+              onDeleteClip={handleDeleteClip}
             />
           </div>
         </div>

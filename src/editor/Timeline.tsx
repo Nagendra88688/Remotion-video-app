@@ -24,6 +24,7 @@ interface TimelineProps {
   onSeek?: (frame: number) => void;
   onOpenTextModal?: (trackId: string) => void;
   onOpenFileUpload?: (trackId: string, trackType: string) => void;
+  onDeleteClip?: (clipId: string) => void;
 }
 
 export const Timeline = ({ 
@@ -36,7 +37,8 @@ export const Timeline = ({
   onAddClipFromLibrary,
   onSeek,
   onOpenTextModal,
-  onOpenFileUpload
+  onOpenFileUpload,
+  onDeleteClip
 }: TimelineProps) => {
   const [zoomLevel, setZoomLevel] = useState(100);
   const [isDragging, setIsDragging] = useState(false);
@@ -504,6 +506,7 @@ export const Timeline = ({
                   onClipSelect={onClipSelect}
                   onAddClip={handleAddClipToTrack}
                   onDeleteTrack={handleDeleteTrack}
+                  onDeleteClip={onDeleteClip}
                   pixelsPerSecond={pixelsPerSecond}
                 />
               </SortableContext>
