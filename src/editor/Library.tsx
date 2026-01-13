@@ -150,7 +150,7 @@ export const Library = ({ assets, onAddClip }: LibraryProps) => {
       borderRight: '1px solid #e0e0e0',
       padding: '16px'
     }}>
-      <div style={{ marginBottom: '16px' }}>
+      {/* <div style={{ marginBottom: '16px' }}>
         <h2 style={{ 
           margin: 0, 
           fontSize: '18px', 
@@ -168,7 +168,7 @@ export const Library = ({ assets, onAddClip }: LibraryProps) => {
         }}>
           {assets.length} {assets.length === 1 ? 'asset' : 'assets'}
         </p>
-      </div>
+      </div> */}
 
       <div style={{ 
         display: 'flex', 
