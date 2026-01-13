@@ -5,7 +5,12 @@ import {
   DndContext,
   type DragEndEvent,
   type DragOverEvent,
+  type DragStartEvent,
+  type DragCancelEvent,
+  DragOverlay,
   closestCenter,
+  pointerWithin,
+  rectIntersection,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Timeline } from "./Timeline";
@@ -37,6 +42,8 @@ export const EditorPage = () => {
     trackId: string | null;
     frame: number;
   } | null>(null);
+  const [activeDragAsset, setActiveDragAsset] = useState<Clip | null>(null);
+  const [activeDragTrack, setActiveDragTrack] = useState<Track | null>(null);
   const currentMouseXRef = useRef<number>(0);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
 
@@ -66,7 +73,7 @@ export const EditorPage = () => {
   ]);
 
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-
+  
   // Calculate total duration based on all clips in all tracks
   const totalFrames = useMemo(() => {
     let maxEnd = 0;
@@ -192,11 +199,32 @@ export const EditorPage = () => {
     };
   }, []);
 
-  // Handle drag start - prevent auto-scrolling
-  const handleDragStart = useCallback(() => {
+  // Handle drag start - prevent auto-scrolling and track dragged asset/track
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     // Disable body scroll during drag
     document.body.style.overflow = "hidden";
-  }, []);
+    
+    // Track which asset or track is being dragged for preview
+    const activeId = event.active.id.toString();
+    if (activeId.startsWith("library-asset-")) {
+      const assetId = activeId.replace("library-asset-", "");
+      const asset = assets.find((a) => a.id === assetId);
+      if (asset) {
+        setActiveDragAsset(asset);
+        setActiveDragTrack(null);
+      }
+    } else {
+      // Check if it's a track being dragged
+      const track = tracks.find((t) => t.id === activeId);
+      if (track) {
+        setActiveDragTrack(track);
+        setActiveDragAsset(null);
+      } else {
+        setActiveDragAsset(null);
+        setActiveDragTrack(null);
+      }
+    }
+  }, [assets, tracks]);
 
   // Handle drag over - track mouse position to calculate drop frame
   const handleDragOver = useCallback(
@@ -255,13 +283,25 @@ export const EditorPage = () => {
     [tracks]
   );
 
+  // Handle drag cancel - clear preview immediately
+  const handleDragCancel = useCallback(() => {
+    document.body.style.overflow = "";
+    setActiveDragAsset(null);
+    setActiveDragTrack(null);
+  }, []);
+
   // Handle drag end for library assets and timeline clips
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      // Clear drag preview immediately (before any other logic)
+      setActiveDragAsset(null);
+      setActiveDragTrack(null);
       // Re-enable body scroll after drag
       document.body.style.overflow = "";
       const { active, over } = event;
-      if (!over) return;
+      if (!over) {
+        return;
+      }
 
       const activeId = active.id as string;
       const overId = over.id as string;
@@ -278,8 +318,30 @@ export const EditorPage = () => {
 
         if (!asset) return;
 
-        // Find the target track
-        const targetTrack = tracks.find((t) => t.id === overId);
+        // Find the target track - try multiple methods
+        let targetTrack = tracks.find((t) => t.id === overId);
+        
+        // If not found by direct ID, check if overId is a clip and find its track
+        if (!targetTrack) {
+          const clipTrack = tracks.find((t) => t.clips.some((c) => c.id === overId));
+          if (clipTrack) {
+            targetTrack = clipTrack;
+          }
+        }
+        
+        // If still not found, check the over data for track information
+        if (!targetTrack && over.data.current) {
+          const overData = over.data.current as { trackId?: string; type?: string } | undefined;
+          if (overData?.trackId) {
+            targetTrack = tracks.find((t) => t.id === overData.trackId);
+          }
+        }
+        
+        // If still not found, try to find compatible track from drag position
+        if (!targetTrack && dragPosition && dragPosition.trackId) {
+          targetTrack = tracks.find((t) => t.id === dragPosition.trackId);
+        }
+        
         if (!targetTrack) return;
 
         // Check if asset type is compatible with track type
@@ -662,13 +724,47 @@ export const EditorPage = () => {
     }
   }, [isPlaying]);
 
-  // Handle clip resize from renderer
+  // Handle clip deletion
+  const handleDeleteClip = useCallback((clipId: string) => {
+    setTracks((prevTracks) => {
+      return prevTracks.map((track) => {
+        // Check if this track contains the clip to delete
+        const clipToDelete = track.clips.find((c) => c.id === clipId);
+        if (!clipToDelete) {
+          return track; // Clip not in this track, return unchanged
+        }
+        
+        // Filter out the deleted clip
+        const updatedClips = track.clips.filter((c) => c.id !== clipId);
+        
+        // Sort clips by startFrame before recalculating
+        const sortedClips = [...updatedClips].sort((a, b) => (a.startFrame || 0) - (b.startFrame || 0));
+        
+        // Recalculate startFrames for remaining clips to fill the gap
+        const recalculatedClips = recalculateStartFrames(sortedClips);
+        
+        // If the deleted clip was selected, clear selection
+        if (selectedClipId === clipId) {
+          setSelectedClipId(null);
+        }
+        
+        return {
+          ...track,
+          clips: recalculatedClips,
+        };
+      });
+    });
+  }, [selectedClipId, recalculateStartFrames]);
+
+  // Handle clip resize and position from renderer
   const handleClipResize = useCallback(
     (
       clipId: string,
       newDurationInFrames: number,
       newScaleX?: number,
-      newScaleY?: number
+      newScaleY?: number,
+      newX?: number,
+      newY?: number
     ) => {
       setTracks((prevTracks) => {
         return prevTracks.map((track) => {
@@ -687,6 +783,13 @@ export const EditorPage = () => {
           }
           if (newScaleY !== undefined) {
             updatedClip.scaleY = newScaleY;
+          }
+          // Update position if provided
+          if (newX !== undefined) {
+            updatedClip.x = newX;
+          }
+          if (newY !== undefined) {
+            updatedClip.y = newY;
           }
 
           updatedClips[clipIndex] = updatedClip;
@@ -791,10 +894,24 @@ export const EditorPage = () => {
   return (
     <>
       <DndContext
-        collisionDetection={closestCenter}
+        collisionDetection={(args) => {
+          // Try pointerWithin first for more accurate detection
+          const pointerCollisions = pointerWithin(args);
+          if (pointerCollisions.length > 0) {
+            return pointerCollisions;
+          }
+          // Fallback to rectIntersection for better coverage
+          const rectCollisions = rectIntersection(args);
+          if (rectCollisions.length > 0) {
+            return rectCollisions;
+          }
+          // Final fallback to closestCenter
+          return closestCenter(args);
+        }}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
         autoScroll={false}
       >
         <div
@@ -888,14 +1005,14 @@ export const EditorPage = () => {
                   maxWidth: "100%",
                 }}
               >
-                <Player
+      <Player
                   ref={playerRef}
-                  component={TimelineComposition}
-                  inputProps={{ tracks, selectedClipId }}
-                  durationInFrames={totalFrames}
-                  fps={30}
-                  compositionWidth={1280}
-                  compositionHeight={720}
+        component={TimelineComposition}
+        inputProps={{ tracks, selectedClipId }}
+        durationInFrames={totalFrames}
+        fps={30}
+        compositionWidth={1280}
+        compositionHeight={720}
                   // controls={true}
                   style={{
                     width: "100%",
@@ -912,6 +1029,7 @@ export const EditorPage = () => {
                   totalFrames={totalFrames}
                   compositionWidth={1280}
                   compositionHeight={720}
+                  isPlaying={isPlaying}
                   onResize={handleClipResize}
                 />
               </div>
@@ -942,12 +1060,12 @@ export const EditorPage = () => {
               overflow: "hidden",
             }}
           >
-            <Timeline
-              tracks={tracks}
-              setTracks={setTracks}
-              fps={30}
-              selectedClipId={selectedClipId}
-              onClipSelect={setSelectedClipId}
+      <Timeline 
+        tracks={tracks}
+        setTracks={setTracks}
+        fps={30}
+        selectedClipId={selectedClipId}
+        onClipSelect={setSelectedClipId}
               currentFrame={currentFrame}
               onAddClipFromLibrary={handleAddClipToTimeline}
               onSeek={handleSeek}
@@ -956,9 +1074,147 @@ export const EditorPage = () => {
                 setShowTextModal(true);
               }}
               onOpenFileUpload={handleOpenFileUpload}
+              onDeleteClip={handleDeleteClip}
             />
           </div>
         </div>
+       {activeDragAsset && <DragOverlay>
+            <div
+              style={{
+                padding: '4px',
+                border: '1.5px solid #4a9eff',
+                borderRadius: '3px',
+                backgroundColor: '#ffffff',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                minWidth: '50px',
+                opacity: 0.9,
+                transform: 'rotate(5deg)',
+              }}
+            >
+              {activeDragAsset.type === 'image' && activeDragAsset.src && (
+                <img
+                  src={activeDragAsset.src}
+                  alt={activeDragAsset.name}
+                  style={{
+                    width: '30px',
+                    height: '20px',
+                    objectFit: 'cover',
+                    borderRadius: '2px',
+                    marginBottom: '2px',
+                  }}
+                />
+              )}
+              {activeDragAsset.type === 'video' && activeDragAsset.src && (
+                <div
+                  style={{
+                    width: '30px',
+                    height: '20px',
+                    backgroundColor: '#000000',
+                    borderRadius: '2px',
+                    marginBottom: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontSize: '8px',
+                  }}
+                >
+                  ▶
+                </div>
+              )}
+              {activeDragAsset.type === 'audio' && (
+                <div
+                  style={{
+                    width: '30px',
+                    height: '20px',
+                    backgroundColor: '#f0f0f0',
+                    borderRadius: '2px',
+                    marginBottom: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '10px',
+                  }}
+                >
+                  🎵
+                </div>
+              )}
+              {activeDragAsset.type === 'text' && (
+                <div
+                  style={{
+                    width: '30px',
+                    height: '20px',
+                    backgroundColor: '#e8f2ff',
+                    borderRadius: '2px',
+                    marginBottom: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '8px',
+                    color: '#1a1a1a',
+                  }}
+                >
+                  T
+                </div>
+              )}
+              <p style={{
+                margin: 0,
+                fontSize: '8px',
+                fontWeight: 500,
+                color: '#1a1a1a',
+                marginBottom: '1px',
+                lineHeight: '1.2',
+              }}>
+                {activeDragAsset.name?.slice(0, 8)}
+              </p>
+              <span style={{
+                fontSize: '7px',
+                color: '#666',
+                textTransform: 'capitalize',
+              }}>
+                {activeDragAsset.type}
+              </span>
+            </div>
+        </DragOverlay>}
+        {activeDragTrack && (
+          <DragOverlay>
+            <div
+              style={{
+                padding: '6px 10px',
+                border: '2px solid #4a9eff',
+                borderRadius: '4px',
+                backgroundColor: '#e8f2ff',
+                boxShadow: '0 2px 8px rgba(74, 158, 255, 0.3)',
+                minWidth: '175px',
+                opacity: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span style={{
+                fontSize: '14px',
+                fontWeight: 500,
+                color: '#1a1a1a',
+              }}>
+                {activeDragTrack.type === "video" 
+                  ? `Image/${activeDragTrack.name || `Track ${activeDragTrack.id.slice(0, 8)}`}`
+                  : activeDragTrack.name || `Track ${activeDragTrack.id.slice(0, 8)}`}
+              </span>
+              {activeDragTrack.type === "audio" && (
+                <span style={{ fontSize: '16px' }}>🎵</span>
+              )}
+              <span style={{
+                fontSize: '11px',
+                color: '#666',
+                textTransform: 'capitalize',
+                marginLeft: 'auto',
+              }}>
+                {activeDragTrack.clips.length} clip{activeDragTrack.clips.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </DragOverlay>
+        )}
       </DndContext>
 
       <TextInputModal

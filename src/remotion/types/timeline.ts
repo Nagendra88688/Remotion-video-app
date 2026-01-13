@@ -10,6 +10,8 @@ export type Clip = {
   name?: string;
   scaleX?: number;               // Horizontal scale (default: 1)
   scaleY?: number;               // Vertical scale (default: 1)
+  x?: number;                     // X position in renderer (default: 0, centered)
+  y?: number;                     // Y position in renderer (default: 0, centered)
 };
 
 export type Track = {

@@ -313,7 +313,7 @@ export const Library = ({ assets, onAddClip }: LibraryProps) => {
           overflowY: 'auto',
           maxHeight: '210px',
           border: '1px solid #f4f4f4',
-          padding: '8px',
+          padding: '6px',
         }}>
           {assets.map((asset) => (
             <LibraryAsset key={asset.id} asset={asset} />

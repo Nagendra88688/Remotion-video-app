@@ -10,6 +10,7 @@ interface Props {
   onClipSelect: (clipId: string | null) => void;
   onAddClip?: (trackId: string, type?: string) => void;
   onDeleteTrack?: (trackId: string) => void;
+  onDeleteClip?: (clipId: string) => void;
   pixelsPerSecond?: number;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }
@@ -36,11 +37,17 @@ export const TrackLane = ({
   onClipSelect,
   onAddClip,
   onDeleteTrack,
+  onDeleteClip,
   pixelsPerSecond = 60,
   dragHandleProps
 }: Props) => {
   const { setNodeRef, isOver } = useDroppable({
     id: track.id,
+    data: {
+      type: 'track',
+      trackId: track.id,
+      trackType: track.type,
+    },
   });
 
   // Calculate total timeline width based on the last clip's end position
@@ -69,7 +76,7 @@ export const TrackLane = ({
         alignItems: 'center',
         marginBottom: 4,
         position: "relative",
-        minHeight: 56,
+        minHeight: 40,
         backgroundColor: trackColor.bg,
         border: `1px solid ${trackColor.border}`,
         borderRadius: '4px',
@@ -80,8 +87,8 @@ export const TrackLane = ({
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '8px',
-        padding: '8px 12px',
+        gap: '6px',
+        padding: '6px 10px',
         minWidth: '175px',
         borderRight: `1px solid ${trackColor.border}`,
         backgroundColor: '#ffffff'
@@ -158,19 +165,18 @@ export const TrackLane = ({
       <div style={{ 
         flex: 1, 
         position: 'relative', 
-        minHeight: 56,
+        minHeight: 40,
         overflowX: 'auto',
         overflowY: 'hidden'
       }}>
         <div 
-          ref={setNodeRef}
           style={{ 
             position: "relative", 
             width: `${timelineWidth}px`, 
             minWidth: '100%',
-            minHeight: 56,
+            minHeight: 40,
             height: "100%",
-            backgroundColor: isOver ? 'rgba(74, 158, 255, 0.1)' : 'transparent'
+            backgroundColor: 'transparent'
           }}
         >
           {track.clips.map((clip) => (
@@ -180,6 +186,7 @@ export const TrackLane = ({
               fps={fps}
               isSelected={selectedClipId === clip.id}
               onSelect={() => onClipSelect(clip.id)}
+              onDelete={() => onDeleteClip?.(clip.id)}
               pixelsPerSecond={pixelsPerSecond}
             />
           ))}
