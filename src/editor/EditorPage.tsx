@@ -987,7 +987,6 @@ export const EditorPage = () => {
           </div>
         </div>
        {activeDragAsset && <DragOverlay>
-          {activeDragAsset ? (
             <div
               style={{
                 padding: '4px',
@@ -1084,7 +1083,6 @@ export const EditorPage = () => {
                 {activeDragAsset.type}
               </span>
             </div>
-          ) : null}
         </DragOverlay>}
       </DndContext>
 
