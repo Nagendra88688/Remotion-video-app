@@ -22,14 +22,19 @@ export const LibraryAsset = ({ asset }: LibraryAssetProps) => {
   });
 
   const style: React.CSSProperties = {
-    padding: '12px',
-    border: '1px solid #e0e0e0',
-    borderRadius: '4px',
-    marginBottom: '8px',
-    backgroundColor: isDragging ? '#f0f0f0' : '#fafafa',
+    padding: '6px 8px',
+    border: '1px solid rgb(218, 165, 221)',
+    borderRadius: '3px',
+    marginBottom: '4px',
+    backgroundColor: isDragging ? '#f0f0f0' : '#feedff',
     cursor: 'grab',
     opacity: isDragging ? 0.5 : 1,
     transform: CSS.Translate.toString(transform),
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 'auto',
+    boxShadow: "rgba(211, 110, 197, 0.15) 1.95px 1.95px 2.6px",
+    // box-shadow: rgba(0, 0, 0, 0.15) 1.95px 1.95px 2.6px;
   };
 
   return (
@@ -41,17 +46,22 @@ export const LibraryAsset = ({ asset }: LibraryAssetProps) => {
     >
       <p style={{ 
         margin: 0, 
-        fontSize: '13px', 
+        fontSize: '11px', 
         fontWeight: 500,
         color: '#1a1a1a',
-        marginBottom: '4px'
+        marginBottom: '2px',
+        lineHeight: '1.2',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
       }}>
         {asset.name}
       </p>
       <span style={{ 
-        fontSize: '12px', 
+        fontSize: '9px', 
         color: '#666',
-        textTransform: 'capitalize'
+        textTransform: 'capitalize',
+        lineHeight: '1.2',
       }}>
         {asset.type}
       </span>
