@@ -43,6 +43,11 @@ export const TrackLane = ({
 }: Props) => {
   const { setNodeRef, isOver } = useDroppable({
     id: track.id,
+    data: {
+      type: 'track',
+      trackId: track.id,
+      trackType: track.type,
+    },
   });
 
   // Calculate total timeline width based on the last clip's end position
@@ -165,14 +170,13 @@ export const TrackLane = ({
         overflowY: 'hidden'
       }}>
         <div 
-          ref={setNodeRef}
           style={{ 
             position: "relative", 
             width: `${timelineWidth}px`, 
             minWidth: '100%',
             minHeight: 40,
             height: "100%",
-            backgroundColor: isOver ? 'rgba(74, 158, 255, 0.1)' : 'transparent'
+            backgroundColor: 'transparent'
           }}
         >
           {track.clips.map((clip) => (

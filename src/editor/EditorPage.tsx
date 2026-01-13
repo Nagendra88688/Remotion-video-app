@@ -9,6 +9,8 @@ import {
   type DragCancelEvent,
   DragOverlay,
   closestCenter,
+  pointerWithin,
+  rectIntersection,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Timeline } from "./Timeline";
@@ -304,8 +306,30 @@ export const EditorPage = () => {
 
         if (!asset) return;
 
-        // Find the target track
-        const targetTrack = tracks.find((t) => t.id === overId);
+        // Find the target track - try multiple methods
+        let targetTrack = tracks.find((t) => t.id === overId);
+        
+        // If not found by direct ID, check if overId is a clip and find its track
+        if (!targetTrack) {
+          const clipTrack = tracks.find((t) => t.clips.some((c) => c.id === overId));
+          if (clipTrack) {
+            targetTrack = clipTrack;
+          }
+        }
+        
+        // If still not found, check the over data for track information
+        if (!targetTrack && over.data.current) {
+          const overData = over.data.current as { trackId?: string; type?: string } | undefined;
+          if (overData?.trackId) {
+            targetTrack = tracks.find((t) => t.id === overData.trackId);
+          }
+        }
+        
+        // If still not found, try to find compatible track from drag position
+        if (!targetTrack && dragPosition && dragPosition.trackId) {
+          targetTrack = tracks.find((t) => t.id === dragPosition.trackId);
+        }
+        
         if (!targetTrack) return;
 
         // Check if asset type is compatible with track type
@@ -858,7 +882,20 @@ export const EditorPage = () => {
   return (
     <>
       <DndContext
-        collisionDetection={closestCenter}
+        collisionDetection={(args) => {
+          // Try pointerWithin first for more accurate detection
+          const pointerCollisions = pointerWithin(args);
+          if (pointerCollisions.length > 0) {
+            return pointerCollisions;
+          }
+          // Fallback to rectIntersection for better coverage
+          const rectCollisions = rectIntersection(args);
+          if (rectCollisions.length > 0) {
+            return rectCollisions;
+          }
+          // Final fallback to closestCenter
+          return closestCenter(args);
+        }}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
