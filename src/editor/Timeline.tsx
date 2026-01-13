@@ -312,6 +312,7 @@ export const Timeline = ({
       {/* Add Track Buttons */}
       <div style={{
         display: 'flex',
+        justifyContent: 'end',
         gap: '8px',
         padding: '12px 16px',
         borderBottom: '1px solid #e0e0e0',
@@ -321,57 +322,57 @@ export const Timeline = ({
           onClick={() => handleAddTrack("video")}
           style={{
             padding: '8px 12px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #d0d0d0',
+            backgroundColor: '#eff6ff',
+            border: '1px solid rgb(123, 175, 244)',
             borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '14px',
+            fontSize: '12px',
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             color: '#1a1a1a'
           }}
-          title="Add Image/Video Track"
+          title="Add Image/Video Layer"
         >
-          <span>🎥</span>
+          <span>🎥 Add video layer</span>
           <span>+</span>
         </button>
         <button
           onClick={() => handleAddTrack("audio")}
           style={{
             padding: '8px 12px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #d0d0d0',
+            backgroundColor: '#eff6ff',
+            border: '1px solid rgb(123, 175, 244)',
             borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '14px',
+            fontSize: '12px',
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             color: '#1a1a1a'
           }}
-          title="Add Audio Track"
+          title="Add Audio Layer"
         >
-          <span>🎵</span>
+          <span>🎵 Add audio layer</span>
           <span>+</span>
         </button>
         <button
           onClick={() => handleAddTrack("text")}
           style={{
             padding: '8px 12px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #d0d0d0',
+            backgroundColor: '#eff6ff',
+            border: '1px solid rgb(123, 175, 244)',
             borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '14px',
+            fontSize: '12px',
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             color: '#1a1a1a'
           }}
-          title="Add Text Track"
+          title="Add Text Layer"
         >
-          <span>Aa</span>
+          <span>(Aa)Add text layer</span>
           <span>+</span>
         </button>
       </div>
