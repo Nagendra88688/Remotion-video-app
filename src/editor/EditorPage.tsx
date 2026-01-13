@@ -5,6 +5,9 @@ import {
   DndContext,
   type DragEndEvent,
   type DragOverEvent,
+  type DragStartEvent,
+  type DragCancelEvent,
+  DragOverlay,
   closestCenter,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
@@ -37,6 +40,7 @@ export const EditorPage = () => {
     trackId: string | null;
     frame: number;
   } | null>(null);
+  const [activeDragAsset, setActiveDragAsset] = useState<Clip | null>(null);
   const currentMouseXRef = useRef<number>(0);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
 
@@ -192,11 +196,23 @@ export const EditorPage = () => {
     };
   }, []);
 
-  // Handle drag start - prevent auto-scrolling
-  const handleDragStart = useCallback(() => {
+  // Handle drag start - prevent auto-scrolling and track dragged asset
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     // Disable body scroll during drag
     document.body.style.overflow = "hidden";
-  }, []);
+    
+    // Track which asset is being dragged for preview
+    const activeId = event.active.id.toString();
+    if (activeId.startsWith("library-asset-")) {
+      const assetId = activeId.replace("library-asset-", "");
+      const asset = assets.find((a) => a.id === assetId);
+      if (asset) {
+        setActiveDragAsset(asset);
+      }
+    } else {
+      setActiveDragAsset(null);
+    }
+  }, [assets]);
 
   // Handle drag over - track mouse position to calculate drop frame
   const handleDragOver = useCallback(
@@ -255,13 +271,23 @@ export const EditorPage = () => {
     [tracks]
   );
 
+  // Handle drag cancel - clear preview immediately
+  const handleDragCancel = useCallback(() => {
+    document.body.style.overflow = "";
+    setActiveDragAsset(null);
+  }, []);
+
   // Handle drag end for library assets and timeline clips
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      // Clear drag preview immediately (before any other logic)
+      setActiveDragAsset(null);
       // Re-enable body scroll after drag
       document.body.style.overflow = "";
       const { active, over } = event;
-      if (!over) return;
+      if (!over) {
+        return;
+      }
 
       const activeId = active.id as string;
       const overId = over.id as string;
@@ -795,6 +821,7 @@ export const EditorPage = () => {
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
         autoScroll={false}
       >
         <div
@@ -959,6 +986,106 @@ export const EditorPage = () => {
             />
           </div>
         </div>
+       {activeDragAsset && <DragOverlay>
+          {activeDragAsset ? (
+            <div
+              style={{
+                padding: '4px',
+                border: '1.5px solid #4a9eff',
+                borderRadius: '3px',
+                backgroundColor: '#ffffff',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                minWidth: '50px',
+                opacity: 0.9,
+                transform: 'rotate(5deg)',
+              }}
+            >
+              {activeDragAsset.type === 'image' && activeDragAsset.src && (
+                <img
+                  src={activeDragAsset.src}
+                  alt={activeDragAsset.name}
+                  style={{
+                    width: '30px',
+                    height: '20px',
+                    objectFit: 'cover',
+                    borderRadius: '2px',
+                    marginBottom: '2px',
+                  }}
+                />
+              )}
+              {activeDragAsset.type === 'video' && activeDragAsset.src && (
+                <div
+                  style={{
+                    width: '30px',
+                    height: '20px',
+                    backgroundColor: '#000000',
+                    borderRadius: '2px',
+                    marginBottom: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontSize: '8px',
+                  }}
+                >
+                  ▶
+                </div>
+              )}
+              {activeDragAsset.type === 'audio' && (
+                <div
+                  style={{
+                    width: '30px',
+                    height: '20px',
+                    backgroundColor: '#f0f0f0',
+                    borderRadius: '2px',
+                    marginBottom: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '10px',
+                  }}
+                >
+                  🎵
+                </div>
+              )}
+              {activeDragAsset.type === 'text' && (
+                <div
+                  style={{
+                    width: '30px',
+                    height: '20px',
+                    backgroundColor: '#e8f2ff',
+                    borderRadius: '2px',
+                    marginBottom: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '8px',
+                    color: '#1a1a1a',
+                  }}
+                >
+                  T
+                </div>
+              )}
+              <p style={{
+                margin: 0,
+                fontSize: '8px',
+                fontWeight: 500,
+                color: '#1a1a1a',
+                marginBottom: '1px',
+                lineHeight: '1.2',
+              }}>
+                {activeDragAsset.name?.slice(0, 8)}
+              </p>
+              <span style={{
+                fontSize: '7px',
+                color: '#666',
+                textTransform: 'capitalize',
+              }}>
+                {activeDragAsset.type}
+              </span>
+            </div>
+          ) : null}
+        </DragOverlay>}
       </DndContext>
 
       <TextInputModal
